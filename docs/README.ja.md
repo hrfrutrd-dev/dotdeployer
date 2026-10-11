@@ -22,6 +22,15 @@
 
 Node.js 20 以上が必要です。
 
+GitHub リポジトリから CLI をグローバルインストールする場合:
+
+```sh
+npm install --global git+https://github.com/hrfrutrd-dev/dotdeployer.git
+dotdeployer --help
+```
+
+開発用に clone して使う場合（または checkout 上で実行する場合）:
+
 ```sh
 git clone https://github.com/hrfrutrd-dev/dotdeployer.git
 cd dotdeployer
@@ -29,7 +38,7 @@ npm ci
 npm link
 ```
 
-`npm link` を使わず、リポジトリから直接実行する場合:
+`npm link` を使わず、checkout から直接実行することもできます:
 
 ```sh
 node ./bin/dotdeployer.js check /path/to/project --provider vercel

@@ -7,14 +7,17 @@ Inspect the project you are about to deploy **before** it leaves your machine: r
 Adapters: Render, Railway, Vercel, Cloudflare Workers / Pages (Wrangler), Google Apps Script (GAS).
 
 ```sh
-npm ci
-npm link
+# Install the CLI globally from this repository
+npm install --global git+https://github.com/hrfrutrd-dev/dotdeployer.git
 
+dotdeployer --help
 dotdeployer check  . --provider vercel          # static preflight of config and files
 dotdeployer audit  . --provider vercel --strict # credential / env-var audit (secret values never printed)
 dotdeployer test   . --provider vercel --build  # same checks plus a real build in a temporary copy
 dotdeployer emulate . --provider cloudflare     # Wrangler official dry-run (no deploy)
 ```
+
+For local development, clone the repository, run `npm ci`, then `npm link` to expose the checked-out CLI on your `PATH`.
 
 A `PASS` means "the local checks this tool performs have passed" — not "the production deploy will certainly succeed". dotdeployer is not a cloud runtime emulator.
 

@@ -25,6 +25,7 @@ dotdeployer/
 
 | Test | Covers |
 |---|---|
+| `test/cli/args.test.js` / `test/cli/cli.test.js` | Option parsing, command help, exit codes, and JSON CLI contracts |
 | `test/commands/audit.test.js` | Secret rules, environment contract, SARIF output |
 | `test/commands/deployment.test.js` | `verify` / `deploy` gating, CLI probes, size checks |
 | `test/commands/emulation.test.js` | Official-CLI emulation paths and failure modes |
@@ -44,7 +45,12 @@ dotdeployer/
 
 ```
 src/
-├── cli/index.js          Argument parsing, usage text, report printing, exit codes
+├── cli/
+│   ├── args.js           Command-line parsing and option validation
+│   ├── help.js           Global and per-command help text
+│   ├── index.js          CLI entry orchestration and exit codes
+│   ├── output.js         Human, JSON, and provider report formatting
+│   └── spec.js           Single source of truth for commands and options
 ├── commands/
 │   ├── check.js          Static preflight: file scan -> generic + provider validation
 │   ├── audit.js          Secret patterns and environment-variable contract
@@ -66,7 +72,7 @@ src/
 
 Layer responsibilities:
 
-- **`cli/`** is the only module that writes to stdout/stderr and the only place that decides exit codes. It never contains validation logic.
+- **`cli/`** owns command parsing, normal stdout/stderr output, and command result codes; `bin/dotdeployer.js` applies the returned code and catches uncaught startup errors. The CLI layer never contains validation logic.
 - **`commands/`** implements one user-facing command each. Every function there is also the API used by the MCP server, so it must stay free of console output.
 - **`core/`** holds primitives with no knowledge of providers or commands.
 - **`project/`** knows how to turn "a project directory or a GitHub repository" into a list of deployable files and parsed configuration.
@@ -76,7 +82,7 @@ Layer responsibilities:
 ## How a command flows
 
 1. `bin/dotdeployer.js` calls `main()` in `src/cli/index.js`.
-2. `parseArgs()` validates the option combination (for example `--execute` requires `--yes`), returning exit code 2 for usage errors.
+2. `parseArgs()` in `src/cli/args.js` validates command-specific options from `src/cli/spec.js`; `src/cli/help.js` supplies global and per-command usage. Usage errors return exit code 2.
 3. `withProjectSource()` (`src/project/source.js`) resolves the project: a local directory, or a temporary clone when `--repo` is used. The temporary clone is removed afterwards.
 4. `scanProjectFiles()` (`src/project/files.js`) lists the deploy context: `git ls-files` including untracked files in a repository, or a filtered directory walk otherwise. It rejects links that escape the project and stops immediately if a file reaches the 20 MB limit — this happens **before** any configuration is parsed.
 5. `checkProject()` (`src/commands/check.js`) runs `validateGenericProject()`, then each selected adapter from `src/providers/index.js`, using `parseConfigFile()` from `src/project/config.js`. Findings are collected with `issue()` and summarised with `summarizeIssues()`.
@@ -85,7 +91,7 @@ Layer responsibilities:
    - `runLocalBuild()` — copies the deploy context to a temporary directory, optionally installs from the lockfile, resolves one build command, runs it, then rescans generated output with `src/core/output.js`;
    - `emulateProject()` — runs the provider's official CLI, recording `emulationLevel` and `limitations`;
    - `verifyProject()` / `deployProject()` — CLI authentication probes, then an environment dry-run and, only with `--execute --yes`, a real publish.
-7. `src/cli/index.js` prints the report (human text, `--json`, or SARIF via `src/reporting/sarif.js`) and returns the exit code.
+7. `src/cli/output.js` formats the report (human text or `--json`; SARIF is serialized via `src/reporting/sarif.js`), while `src/cli/index.js` selects the handler and returns the exit code.
 
 ## Invariants
 

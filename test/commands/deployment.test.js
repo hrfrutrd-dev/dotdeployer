@@ -309,7 +309,10 @@ test('CLI verify and deploy JSON modes are usable; execute requires an explicit 
     './bin/dotdeployer.js', 'deploy', root, '--provider', 'cloudflare', '--environment', 'staging', '--execute', '--json',
   ], { cwd: repositoryRoot, encoding: 'utf8', env });
   assert.equal(unsafe.status, 2);
-  assert.match(unsafe.stderr, /requires both --execute and --yes/);
+  assert.equal(unsafe.stderr, '');
+  const usageError = JSON.parse(unsafe.stdout);
+  assert.equal(usageError.error.code, 'USAGE_ERROR');
+  assert.match(usageError.error.message, /requires both --execute and --yes/);
   const calls = await readFile(trace, 'utf8');
   assert.doesNotMatch(calls, /^deploy --env staging$/m);
 });

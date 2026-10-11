@@ -9,21 +9,23 @@
 ## 起動方法
 
 ```sh
-# npm link（または npm install -g）後
+# グローバルインストール（または npm link）後
 dotdeployer <command> [path] [options]
 
 # リポジトリから直接実行
 node ./bin/dotdeployer.js <command> [path] [options]
 
-# 引数なし、または -h / --help / help は使い方を表示して終了コード 0
+# 全体ヘルプとバージョン
 dotdeployer
 dotdeployer --help
-
-# バージョンのみ
 dotdeployer --version
+
+# コマンド別ヘルプ
+dotdeployer check --help
+dotdeployer help deploy
 ```
 
-不明なコマンドを指定した場合は、使い方を stderr に出力して終了コード `2` で終了します。
+不明なコマンド・未対応オプション・不正なオプションの組み合わせは、使い方を stderr に出力して終了コード `2` で終了します。レポートを出力するコマンドで `--json` を指定した場合、使用法エラーも stdout に JSON として出力します。
 
 ## コマンド
 
@@ -37,6 +39,7 @@ dotdeployer --version
 | `deploy [path] --provider cloudflare --environment <name>` | 既定はシミュレーション。実際の非 production Workers デプロイは `--execute --yes` を指定した場合のみ。 | `--execute --yes` 指定時のみ |
 | `providers [--json]` | 対応アダプターと設定ファイル形式の一覧。 | なし |
 | `mcp` | Claude Code などから利用する MCP stdio サーバーを起動。 | なし |
+| `help [command]` | 全体または指定したコマンドのヘルプを表示。`<command> --help` でも利用可能。 | なし |
 
 ## オプション
 
@@ -51,8 +54,8 @@ dotdeployer --version
 | `--strict` | フラグ | 無効 | check, audit, test, emulate, verify, deploy | すべての warning を error に格上げします。 |
 | `--build` | フラグ | 無効 | check, test のみ | 一時コピー上でビルドコマンドを実行します。 |
 | `--install` | フラグ | 無効 | `--build` と併用、または emulate / deploy | 一時コピー内で lockfile に従って依存を取得し、依存パッケージの install script を実行します。 |
-| `--timeout <seconds>` | 1–1800 | 600（`verify` は 60） | test, emulate, verify, deploy | コマンドごとのタイムアウト。範囲外の値は使用法エラーになります。 |
-| `--json` | フラグ | 無効 | 全コマンド | 機械可読な JSON を 1 ドキュメントで出力します。 |
+| `--timeout <seconds>` | 1–1800 | 600（`verify` は 60） | check, test, emulate, verify, deploy | ビルド / runner の各処理に適用するタイムアウト。範囲外の値は使用法エラーになります。 |
+| `--json` | フラグ | 無効 | レポートを出力する各コマンドと `providers`（`mcp` を除く） | 機械可読な JSON を 1 ドキュメントで出力します。使用法エラーも stdout に JSON で出力します。 |
 | `--sarif` | フラグ | 無効 | check, audit のみ | SARIF 2.1.0。`--json` および `--build` とは併用できません。 |
 | `--environment <name>`, `--env` | Wrangler 環境名 | – | deploy のみ | Wrangler 設定に存在する名前を指定します。production は指定できません。 |
 | `--execute` | フラグ | 無効 | deploy のみ | 実際のリモートデプロイを実行します。`--yes` が必要です。 |

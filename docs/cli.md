@@ -9,21 +9,23 @@ Every command, option, exit code, and output format of the `dotdeployer` CLI.
 ## Invocation
 
 ```sh
-# After npm link (or npm install -g)
+# After a global install (or npm link)
 dotdeployer <command> [path] [options]
 
 # Straight from a checkout
 node ./bin/dotdeployer.js <command> [path] [options]
 
-# No arguments, or -h/--help/help: print usage and exit 0
+# Global help and version
 dotdeployer
 dotdeployer --help
-
-# Version only
 dotdeployer --version
+
+# Command-specific help
+dotdeployer check --help
+dotdeployer help deploy
 ```
 
-An unknown command prints usage to stderr and exits with code `2`.
+An unknown command, unsupported option, or invalid option combination prints usage to stderr and exits with code `2`. Use `--json` on report commands to receive usage errors as a JSON object on stdout.
 
 ## Commands
 
@@ -37,6 +39,7 @@ An unknown command prints usage to stderr and exits with code `2`.
 | `deploy [path] --provider cloudflare --environment <name>` | Simulation by default; a real, non-production Workers deploy only with `--execute --yes`. | Only when `--execute --yes` is given |
 | `providers [--json]` | List the supported provider adapters and their configuration formats. | No |
 | `mcp` | Start the MCP server over stdio for Claude Code and other agents. | No |
+| `help [command]` | Show global usage or help for one command. Also available as `<command> --help`. | No |
 
 ## Options
 
@@ -51,8 +54,8 @@ An unknown command prints usage to stderr and exits with code `2`.
 | `--strict` | flag | off | check, audit, test, emulate, verify, deploy | Promotes every warning to an error. |
 | `--build` | flag | off | check, test only | Runs the build command on a temporary copy. |
 | `--install` | flag | off | with `--build`, or with `emulate` / `deploy` | Installs dependencies from the lockfile inside the temporary copy and runs dependency install scripts. |
-| `--timeout <seconds>` | 1–1800 | 600 (`verify`: 60) | test, emulate, verify, deploy | Per-command timeout. Out-of-range values are usage errors. |
-| `--json` | flag | off | all commands | Machine-readable single JSON document. |
+| `--timeout <seconds>` | 1–1800 | 600 (`verify`: 60) | check, test, emulate, verify, deploy | Per-command timeout for any build/runner step. Out-of-range values are usage errors. |
+| `--json` | flag | off | report commands and `providers` (not `mcp`) | Machine-readable single JSON document; usage errors are also JSON on stdout. |
 | `--sarif` | flag | off | check, audit only | SARIF 2.1.0. Cannot be combined with `--json` or `--build`. |
 | `--environment <name>`, `--env` | Wrangler env name | – | deploy only | Must exist in the Wrangler configuration and must not be production. |
 | `--execute` | flag | off | deploy only | Performs the real remote deploy. Requires `--yes`. |
