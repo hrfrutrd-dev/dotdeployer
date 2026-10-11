@@ -1,7 +1,7 @@
 {
   "name": "dotdeployer",
   "version": "0.2.0",
-  "description": "Strict local deployment preflight and build checks for popular hosting platforms",
+  "description": "Strict deployment preflight, live provider verification, and guarded deploy workflows for popular hosting platforms",
   "type": "module",
   "engines": {
     "node": ">=20"
