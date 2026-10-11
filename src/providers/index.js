@@ -570,11 +570,10 @@ export async function validateGenericProject(projectRoot, files, issues) {
     if (packageJson.type !== undefined && !['module', 'commonjs'].includes(packageJson.type)) {
       issues.push(issue('error', 'PACKAGE_TYPE_INVALID', 'package.json type must be module or commonjs.', 'package.json'));
     }
-    if (packageJson.engines?.node !== undefined && typeof packageJson.engines.node !== 'string') {
-      issues.push(issue('error', 'PACKAGE_NODE_ENGINE_INVALID', 'package.json engines.node must be a string.', 'package.json'));
-    }
-    if (packageJson.packageManager !== undefined && typeof packageJson.packageManager !== 'string') {
-      issues.push(issue('error', 'PACKAGE_MANAGER_INVALID', 'package.json packageManager must be a string such as npm@10 or pnpm@9.', 'package.json'));
+    if (packageJson.engines !== undefined && (!packageJson.engines || typeof packageJson.engines !== 'object' || Array.isArray(packageJson.engines))) {
+      issues.push(issue('error', 'PACKAGE_ENGINES_INVALID', 'package.json engines must be an object.', 'package.json'));
+    } else if (packageJson.engines?.node !== undefined && (typeof packageJson.engines.node !== 'string' || !packageJson.engines.node.trim())) {
+      issues.push(issue('error', 'PACKAGE_NODE_ENGINE_INVALID', 'package.json engines.node must be a non-empty string.', 'package.json'));
     }
   }
 
@@ -587,20 +586,28 @@ export async function validateGenericProject(projectRoot, files, issues) {
     ['bun', 'bun.lockb'],
   ];
   const presentLocks = locks.filter(([, file]) => files.some((entry) => entry.path === file));
-  const declaredManager = packageJson?.packageManager?.split('@')[0]?.toLowerCase();
-  if (declaredManager) {
-    const managerAliases = new Map([['npm', 'npm'], ['pnpm', 'pnpm'], ['yarn', 'yarn'], ['bun', 'bun']]);
-    if (!managerAliases.has(declaredManager)) {
-      issues.push(issue('error', 'PACKAGE_MANAGER_UNSUPPORTED', `Unsupported packageManager ${JSON.stringify(packageJson.packageManager)}.`, 'package.json',
-        'Use npm, pnpm, yarn, or bun for this local installer.'));
-    } else if (!presentLocks.some(([manager]) => manager === declaredManager)) {
-      issues.push(issue('error', 'PACKAGE_MANAGER_LOCK_MISSING', `package.json declares ${declaredManager}, but its lockfile is missing.`, 'package.json',
-        `Commit the ${declaredManager} lockfile so the local build uses a deterministic dependency graph.`));
+  const hasPackageManager = packageJson?.packageManager !== undefined;
+  const packageManagerValue = packageJson?.packageManager;
+  let declaredManager;
+  if (hasPackageManager) {
+    if (typeof packageManagerValue !== 'string' || !packageManagerValue.trim() || packageManagerValue.trim() !== packageManagerValue) {
+      issues.push(issue('error', 'PACKAGE_MANAGER_INVALID', 'package.json packageManager must be a non-empty string such as npm@10 or pnpm@9.', 'package.json'));
+    } else {
+      declaredManager = packageManagerValue.split('@')[0].toLowerCase();
+      const supportedManagers = new Set(['npm', 'pnpm', 'yarn', 'bun']);
+      if (!supportedManagers.has(declaredManager)) {
+        issues.push(issue('error', 'PACKAGE_MANAGER_UNSUPPORTED', `Unsupported packageManager ${JSON.stringify(packageManagerValue)}.`, 'package.json',
+          'Use npm, pnpm, yarn, or bun for this local installer.'));
+      } else if (!presentLocks.some(([manager]) => manager === declaredManager)) {
+        issues.push(issue('error', 'PACKAGE_MANAGER_LOCK_MISSING', `package.json declares ${declaredManager}, but its lockfile is missing.`, 'package.json',
+          `Commit the ${declaredManager} lockfile so the local build uses a deterministic dependency graph.`));
+      }
     }
-  } else if (presentLocks.length > 1 && new Set(presentLocks.map(([manager]) => manager)).size > 1) {
+  }
+  if (!hasPackageManager && presentLocks.length > 1 && new Set(presentLocks.map(([manager]) => manager)).size > 1) {
     issues.push(issue('warning', 'MULTIPLE_LOCKFILES', `Multiple package manager lockfiles were found: ${[...new Set(presentLocks.map(([manager]) => manager))].join(', ')}.`, 'package.json',
       'Commit one package manager lockfile or declare packageManager in package.json.'));
-  } else if (packageJson && presentLocks.length === 0) {
+  } else if (!hasPackageManager && packageJson && presentLocks.length === 0) {
     issues.push(issue('warning', 'LOCKFILE_MISSING', 'package.json has no recognized lockfile; installs may resolve different dependency versions over time.', 'package.json',
       'Commit a package-manager lockfile for reproducible deploys.'));
   }

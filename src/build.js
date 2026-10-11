@@ -125,6 +125,9 @@ function packageManagerFrom(packageJson, files) {
   if (files.some((file) => file.path === 'bun.lock' || file.path === 'bun.lockb')) locks.push('bun');
 
   const declared = packageJson?.packageManager;
+  if (declared !== undefined && (typeof declared !== 'string' || !declared.trim() || declared.trim() !== declared)) {
+    throw new DotdeployerError('package.json packageManager must be a non-empty string.', { code: 'PACKAGE_MANAGER_INVALID' });
+  }
   if (declared) {
     const manager = declared.split('@')[0].toLowerCase();
     if (!['npm', 'pnpm', 'yarn', 'bun'].includes(manager)) {
@@ -147,7 +150,8 @@ function packageManagerFrom(packageJson, files) {
 }
 
 function packageManagerForScript(packageJson, files) {
-  const declared = packageJson?.packageManager?.split('@')[0]?.toLowerCase();
+  const packageManager = packageJson?.packageManager;
+  const declared = typeof packageManager === 'string' ? packageManager.split('@')[0].toLowerCase() : undefined;
   if (['npm', 'pnpm', 'yarn', 'bun'].includes(declared)) return declared;
   const found = [];
   if (files.some((file) => file.path === 'package-lock.json' || file.path === 'npm-shrinkwrap.json')) found.push('npm');

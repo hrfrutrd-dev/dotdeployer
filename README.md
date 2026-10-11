@@ -55,11 +55,45 @@ dotdeployer test . --provider vercel --build --install --timeout 900
 
 # 各社公式 CLI によるローカルのビルド / dry-run 検査（公式 CLI の事前インストールが必要）
 dotdeployer emulate . --provider cloudflare --timeout 900
+
+# ローカル検査に加えて、選択した公式 CLI の認証状態を確認（whoami の出力は隠す）
+dotdeployer verify . --provider cloudflare
+
+# 実デプロイはせず、Wrangler staging 環境で検査・dry-run・デプロイ計画まで実施
+dotdeployer deploy . --provider cloudflare --environment staging
+
+# 【実際のリモート操作】確認済みの非 production Worker にだけデプロイ
+# 環境設定を確認し、明示的に実行する場合に限り --execute --yes を指定
+dotdeployer deploy . --provider cloudflare --environment staging --execute --yes
 ```
 
-コマンド名は `check` と `test` のどちらでも同じです。`--build` を付けない限り、プロジェクトのビルドやインストールは実行しません。プロバイダー指定のない場合は、対応設定ファイルを自動検出し、複数見つかればそれらをすべて静的検査します。ビルド時に複数プロバイダーが検出された場合は、対象を一つに絞るため明示指定が必要です。
+`check` と `test` は `--build` を付けない限り、設定・ファイルの静的検査だけを行います。`emulate` は公式 CLI によるローカル dry-run / build、`deploy` は認証確認と指定環境の dry-run を行いますが、依存インストールは `--install` を明示した場合だけです。プロバイダー指定のない場合は、対応設定ファイルを自動検出し、複数見つかればそれらをすべて静的検査します。ビルド時に複数プロバイダーが検出された場合は、対象を一つに絞るため明示指定が必要です。
 
 `audit` はビルドを実行しない読み取り専用の追加検査です。`--strict` を指定すると、未文書化の環境変数や「公開される可能性がある API key」のような警告もエラーになります。`--sarif` は `check` または `audit` でのみ使え、`--json` とは同時に指定できません。
+
+## ライブ検証と実デプロイ（実験的）
+
+`verify` は `check` / `audit` に加え、Render / Railway / Vercel / Wrangler / clasp の公式 CLI で `whoami` 相当の認証確認を行います。CLI の identity 出力や生ログはレポートに含めません。確認できるのは CLI の認証状態までで、特定サービスへの権限、環境変数の実値、provider 側ビルド成功を保証するものではありません。
+
+`deploy` は **デフォルトでは simulation のみ**です。Cloudflare Workers の単一の Wrangler 設定に対して、ローカル preflight・secret audit・認証確認・指定環境の upload-free dry-run と生成 artifact のサイズ検査を行い、予定コマンドを表示します。リモートへの publish はしません。
+
+実際のリモート操作は、次のすべてを満たす場合に限り実行されます。
+
+- `--execute --yes` の両方を明示する。
+- `--environment` で Wrangler 設定に存在する名前付き環境を指定する。
+- 対象が Cloudflare Workers であり、Pages ではない。
+- 対象環境名（または Wrangler の環境 Worker 名）に `prod` / `production` セグメントが含まれない。
+- 認証・静的検査・セキュリティ監査・同じ環境での Wrangler dry-run が成功する。
+
+```sh
+# こちらは simulation。ネットワークへの publish はしない
+dotdeployer deploy . --provider cloudflare --environment staging
+
+# 実操作。Wrangler が staging 環境に Worker を publish する
+dotdeployer deploy . --provider cloudflare --environment staging --execute --yes
+```
+
+実デプロイは一部 provider / Worker 環境に限定した初期実装で、Render / Railway / Vercel / GAS の `deploy` 実行、Cloudflare Pages、production は意図的に未対応です。`--install` は一時コピー内で lockfile に従って依存を取得し、install script を実行します。信頼できるコードにだけ使用してください。タイムアウト時に CLI プロセスは停止しますが、provider 側ですでに受け付けられた操作を取り消せるとは限りません。デプロイ後の smoke test / 自動 rollback も行わないため、実行前に対象アカウントと環境を確認してください。
 
 ### 20 MB のハード上限
 
@@ -96,7 +130,7 @@ SARIF には位置情報を持つ issue を file / line として出力します
 | Vercel | `vercel.json` | JSON、build/output directory、rewrites / redirects / headers、functions の代表的な型。Free 想定で cron を使う場合は現在のプラン制限を別途確認する警告を出します。 |
 | Cloudflare Workers / Pages | `wrangler.toml` / `wrangler.json` / `wrangler.jsonc` | TOML / JSON / JSONC、main / assets のパス、vars、build、互換日付。互換日付が未指定の場合はローカルポリシーでエラーにします。 |
 | Google Apps Script | `appsscript.json` / `.clasp.json` | マニフェスト、`rootDir`、runtime、OAuth scopes、Web App 設定の代表項目。ビルド時に `.gs` の JavaScript 構文を解析しますが、Apps Script API を実行するものではありません。 |
-| 共通 | `package.json`、lockfile、`Dockerfile`、デプロイ対象テキスト | JSON / scripts / package manager と lockfile の整合性、Dockerfile の `FROM`、`audit` による高信頼度 credential / 環境変数契約の検査。 |
+| 共通 | `package.json`、lockfile、`Dockerfile`、デプロイ対象テキスト | JSON / scripts / `engines.node` / `packageManager` の型と lockfile 整合性、Dockerfile の `FROM`、`audit` による高信頼度 credential / 環境変数契約の検査。 |
 
 ### 公式ローカル runner を使う `emulate`
 
@@ -124,7 +158,7 @@ dotdeployer emulate ./worker --provider cloudflare
 
 ## MCP サーバー
 
-`dotdeployer mcp` は MCP の stdio サーバーを起動します。Claude Code などの MCP クライアントから、読み取り専用の `preflight_check`、credential / 環境変数を読む `audit_project`、任意実行の `run_local_build`、公式 CLI を使う `emulate_project`、`list_providers` を利用できます。`preflight_check` / `audit_project` / `run_local_build` / `emulate_project` は GitHub の `repository` と任意の `ref` を受け付けます。`audit_project` は project code を実行せず、検出した secret value を結果に返しません。`emulate_project` は対応 CLI が必要で、対応外の完全な runtime 再現を装って成功扱いにはしません。
+`dotdeployer mcp` は MCP の stdio サーバーを起動します。Claude Code などの MCP クライアントから、読み取り専用の `preflight_check`、credential / 環境変数を読む `audit_project`、公式 CLI の認証を確認する `verify_provider_access`、任意実行の `run_local_build`、公式 CLI を使う `emulate_project`、`list_providers` を利用できます。これらの project 検査ツールは GitHub の `repository` と任意の `ref` を受け付けます。`verify_provider_access` は whoami 相当コマンドを実行しますが、アカウント identity と生ログは返しません。`audit_project` は project code を実行せず、検出した secret value を結果に返しません。`emulate_project` は対応 CLI が必要で、対応外の完全な runtime 再現を装って成功扱いにはしません。MCP には実デプロイ tool を公開していません。リモート操作が必要な場合は、対象・環境を確認したうえで CLI の `deploy --execute --yes` を明示的に利用してください。
 
 Claude Code の MCP 設定例（`/absolute/path/to/dotdeployer` は実際のパスに置換）:
 

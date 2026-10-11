@@ -7,6 +7,7 @@ import { checkProject } from './check.js';
 import { runLocalBuild } from './build.js';
 import { emulateProject } from './emulation.js';
 import { auditProject } from './audit.js';
+import { verifyProject } from './deployment.js';
 import { providerInfo } from './providers/index.js';
 import { withProjectSource } from './source.js';
 
@@ -42,6 +43,24 @@ const TOOLS = [
         plan: { type: 'string', description: 'Assumed plan profile, such as free or paid. Defaults to free.' },
         strict: { type: 'boolean', description: 'Treat audit and preflight warnings as errors.' },
       },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'verify_provider_access',
+    description: 'Run local preflight and credential scanning, then invoke the selected provider CLI identity command (whoami or clasp login --status). Identity text and raw CLI output are suppressed. This is a read-only live access check and does not deploy.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Local project directory. Defaults to the current working directory.' },
+        repository: { type: 'string', description: 'Optional GitHub repository to clone for source preflight; provider auth still uses the local CLI account.' },
+        ref: { type: 'string', description: 'Optional branch or tag (only valid with repository).' },
+        provider: { type: 'string', enum: providerEnum, description: 'Exactly one provider adapter to verify.' },
+        plan: { type: 'string', description: 'Assumed plan profile. Defaults to free.' },
+        strict: { type: 'boolean', description: 'Treat all preflight and audit warnings as errors.' },
+        timeoutSeconds: { type: 'integer', minimum: 1, maximum: 1800, description: 'Timeout for provider CLI probes. Defaults to 60 seconds.' },
+      },
+      required: ['provider'],
       additionalProperties: false,
     },
   },
@@ -153,6 +172,27 @@ export async function startMcpServer() {
             provider: args.provider ?? 'auto',
             plan: args.plan ?? 'free',
             strict: args.strict ?? false,
+          });
+          if (args.repository) {
+            report.projectRoot = args.repository;
+            report.preflight.projectRoot = args.repository;
+          }
+        });
+        return textResult(report, !report.ok);
+      }
+      if (name === 'verify_provider_access') {
+        let report;
+        await withProjectSource({
+          projectRoot: path.resolve(args.path ?? '.'),
+          repository: args.repository,
+          ref: args.ref,
+        }, async (projectRoot) => {
+          report = await verifyProject({
+            projectRoot,
+            provider: args.provider,
+            plan: args.plan ?? 'free',
+            strict: args.strict ?? false,
+            timeoutSeconds: args.timeoutSeconds ?? 60,
           });
           if (args.repository) {
             report.projectRoot = args.repository;

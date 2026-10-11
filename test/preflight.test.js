@@ -193,6 +193,44 @@ test('rejects oversized generated deployment artifacts after build', async (t) =
   assert.ok(result.issues.some((item) => item.code === 'FILE_TOO_LARGE'));
 });
 
+test('reports malformed package metadata without throwing during preflight', async (t) => {
+  const cases = [
+    {
+      packageJson: { name: 'invalid-metadata', engines: '>=20', packageManager: 42 },
+      expected: ['PACKAGE_ENGINES_INVALID', 'PACKAGE_MANAGER_INVALID'],
+    },
+    {
+      packageJson: { name: 'invalid-metadata', engines: { node: '' }, packageManager: '' },
+      expected: ['PACKAGE_NODE_ENGINE_INVALID', 'PACKAGE_MANAGER_INVALID'],
+    },
+  ];
+
+  for (const { packageJson, expected } of cases) {
+    const root = await makeProject();
+    t.after(() => rm(root, { recursive: true, force: true }));
+    await write(root, 'package.json', JSON.stringify(packageJson));
+
+    const result = await checkProject({ projectRoot: root, provider: 'generic' });
+    assert.equal(result.ok, false);
+    for (const code of expected) assert.ok(result.issues.some((item) => item.code === code), `missing ${code}`);
+  }
+});
+
+test('accepts valid Node engine and package manager metadata with its lockfile', async (t) => {
+  const root = await makeProject();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await write(root, 'package.json', JSON.stringify({
+    name: 'valid-metadata',
+    engines: { node: '>=20' },
+    packageManager: 'npm@10.9.8',
+  }));
+  await write(root, 'package-lock.json', JSON.stringify({ name: 'valid-metadata', lockfileVersion: 3, packages: {} }));
+
+  const result = await checkProject({ projectRoot: root, provider: 'generic' });
+  assert.equal(result.ok, true);
+  assert.equal(result.issues.some((item) => item.code.startsWith('PACKAGE_')), false);
+});
+
 test('strict mode promotes reproducibility warnings to errors', async (t) => {
   const root = await makeProject();
   t.after(() => rm(root, { recursive: true, force: true }));
