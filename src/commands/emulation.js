@@ -3,12 +3,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { checkProject } from './check.js';
-import { VERSION } from './constants.js';
+import { VERSION } from '../core/constants.js';
 import { copyDeployContext, installProjectDependencies, runLocalBuild, runProcess } from './build.js';
-import { parseConfigFile } from './config.js';
-import { issue } from './errors.js';
-import { scanProjectFiles } from './files.js';
-import { scanGeneratedOutput } from './output.js';
+import { parseConfigFile } from '../project/config.js';
+import { issue } from '../core/errors.js';
+import { scanProjectFiles } from '../project/files.js';
+import { scanGeneratedOutput } from '../core/output.js';
 
 const CONFIG_NAMES = {
   render: new Set(['render.yaml', 'render.yml']),

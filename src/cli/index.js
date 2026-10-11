@@ -1,13 +1,13 @@
 import path from 'node:path';
-import { VERSION, PROVIDERS, PROVIDER_ALIASES, MAX_FILE_SIZE_BYTES } from './constants.js';
-import { checkProject } from './check.js';
-import { runLocalBuild } from './build.js';
-import { emulateProject } from './emulation.js';
-import { auditProject } from './audit.js';
-import { providerInfo } from './providers/index.js';
-import { reportToSarif } from './sarif.js';
-import { verifyProject, deployProject } from './deployment.js';
-import { withProjectSource } from './source.js';
+import { VERSION, PROVIDERS, PROVIDER_ALIASES, MAX_FILE_SIZE_BYTES } from '../core/constants.js';
+import { checkProject } from '../commands/check.js';
+import { runLocalBuild } from '../commands/build.js';
+import { emulateProject } from '../commands/emulation.js';
+import { auditProject } from '../commands/audit.js';
+import { providerInfo } from '../providers/index.js';
+import { reportToSarif } from '../reporting/sarif.js';
+import { verifyProject, deployProject } from '../commands/deployment.js';
+import { withProjectSource } from '../project/source.js';
 
 const USAGE = `dotdeployer ${VERSION} — strict local deployment preflight
 
@@ -289,7 +289,7 @@ function printProviders(asJson) {
   }
   process.stdout.write('Supported static adapters:\n');
   for (const provider of info) process.stdout.write(`  ${provider.id.padEnd(12)} ${provider.label} — ${provider.description}\n`);
-  process.stdout.write('\nFree/paid is a policy label, not a full recreation of current vendor quotas. See README.md for scope and limitations.\n');
+  process.stdout.write('\nFree/paid is a policy label, not a full recreation of current vendor quotas. See docs/README.md for scope and limitations.\n');
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -317,7 +317,7 @@ export async function main(argv = process.argv.slice(2)) {
     return 0;
   }
   if (options.command === 'mcp') {
-    const { startMcpServer } = await import('./mcp.js');
+    const { startMcpServer } = await import('../mcp/server.js');
     await startMcpServer();
     return 0;
   }

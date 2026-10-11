@@ -3,11 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { auditProject } from './audit.js';
 import { copyDeployContext, installProjectDependencies, runProcess } from './build.js';
-import { VERSION } from './constants.js';
-import { issue, summarizeIssues } from './errors.js';
-import { scanProjectFiles } from './files.js';
-import { parseConfigFile } from './config.js';
-import { scanGeneratedOutput } from './output.js';
+import { VERSION } from '../core/constants.js';
+import { issue, summarizeIssues } from '../core/errors.js';
+import { scanProjectFiles } from '../project/files.js';
+import { parseConfigFile } from '../project/config.js';
+import { scanGeneratedOutput } from '../core/output.js';
 
 const ACCESS_PROBES = Object.freeze({
   render: { cli: 'render', args: ['whoami'] },

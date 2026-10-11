@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { emulateProject } from '../src/emulation.js';
+import { emulateProject } from '../../src/commands/emulation.js';
 
 async function makeProject(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dotdeployer-emulator-test-'));

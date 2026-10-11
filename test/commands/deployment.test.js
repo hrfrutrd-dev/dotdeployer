@@ -5,9 +5,9 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deployProject, verifyProject } from '../src/deployment.js';
+import { deployProject, verifyProject } from '../../src/commands/deployment.js';
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const identitySentinel = 'SENSITIVE_PROVIDER_IDENTITY_MUST_NOT_APPEAR';
 
 async function makeProject(t) {

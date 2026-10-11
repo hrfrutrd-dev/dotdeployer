@@ -1,8 +1,8 @@
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { PROVIDERS, PROVIDER_ALIASES } from '../constants.js';
-import { parseConfigFile, assertObjectConfig } from '../config.js';
-import { issue } from '../errors.js';
+import { PROVIDERS, PROVIDER_ALIASES } from '../core/constants.js';
+import { parseConfigFile, assertObjectConfig } from '../project/config.js';
+import { issue } from '../core/errors.js';
 
 const FREE_PLAN_NAMES = Object.freeze({
   render: new Set(['free']),

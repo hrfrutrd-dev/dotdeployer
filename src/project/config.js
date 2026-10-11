@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parseDocument } from 'yaml';
 import { parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 import { parse as parseToml } from 'smol-toml';
-import { issue } from './errors.js';
+import { issue } from '../core/errors.js';
 
 export function parseJsoncStrict(text, filePath, issues, { jsonc = false } = {}) {
   if (!jsonc) {
