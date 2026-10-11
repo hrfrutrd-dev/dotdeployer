@@ -3,6 +3,32 @@
   "version": "0.2.0",
   "description": "Strict deployment preflight, live provider verification, and guarded deploy workflows for popular hosting platforms",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hrfrutrd-dev/dotdeployer.git"
+  },
+  "homepage": "https://github.com/hrfrutrd-dev/dotdeployer#readme",
+  "bugs": {
+    "url": "https://github.com/hrfrutrd-dev/dotdeployer/issues"
+  },
+  "keywords": [
+    "cli",
+    "deployment",
+    "preflight",
+    "security-audit",
+    "render",
+    "railway",
+    "vercel",
+    "cloudflare",
+    "wrangler"
+  ],
+  "files": [
+    "bin/",
+    "src/",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
   "engines": {
     "node": ">=20"
   },

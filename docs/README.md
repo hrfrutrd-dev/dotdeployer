@@ -22,6 +22,15 @@ Supported adapters: Render, Railway, Vercel, Cloudflare Workers / Pages (Wrangle
 
 Node.js 20 or newer is required.
 
+Install the command globally from the GitHub repository:
+
+```sh
+npm install --global git+https://github.com/hrfrutrd-dev/dotdeployer.git
+dotdeployer --help
+```
+
+For local development (or to run from a checkout):
+
 ```sh
 git clone https://github.com/hrfrutrd-dev/dotdeployer.git
 cd dotdeployer
@@ -29,7 +38,7 @@ npm ci
 npm link
 ```
 
-To run it straight from the checkout without `npm link`:
+You can also invoke the checked-out entrypoint without `npm link`:
 
 ```sh
 node ./bin/dotdeployer.js check /path/to/project --provider vercel

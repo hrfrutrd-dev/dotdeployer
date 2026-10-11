@@ -25,6 +25,7 @@ dotdeployer/
 
 | テスト | 対象 |
 |---|---|
+| `test/cli/args.test.js` / `test/cli/cli.test.js` | オプション解析、コマンド別ヘルプ、終了コード、JSON CLI 契約 |
 | `test/commands/audit.test.js` | secret ルール、環境変数契約、SARIF 出力 |
 | `test/commands/deployment.test.js` | `verify` / `deploy` のゲート、CLI 確認、サイズ検査 |
 | `test/commands/emulation.test.js` | 公式 CLI による emulation の経路と失敗時の挙動 |
@@ -44,7 +45,12 @@ dotdeployer/
 
 ```
 src/
-├── cli/index.js          引数の解析、使い方の表示、レポート出力、終了コード
+├── cli/
+│   ├── args.js           CLI 引数の解析とオプション検証
+│   ├── help.js           全体ヘルプとコマンド別ヘルプ
+│   ├── index.js          CLI の実行制御と終了コード
+│   ├── output.js         人間向け / JSON / provider レポートの整形
+│   └── spec.js           コマンドとオプション定義の単一の情報源
 ├── commands/
 │   ├── check.js          静的 preflight: ファイル走査 → 共通検査 + プロバイダー検査
 │   ├── audit.js          secret パターンと環境変数契約
@@ -66,7 +72,7 @@ src/
 
 各層の役割は次のとおりです。
 
-- **`cli/`** は stdout / stderr に書き込む唯一のモジュールで、終了コードを決めるのもここだけです。検証ロジックは置きません。
+- **`cli/`** はコマンド解析、通常の stdout / stderr 出力、コマンド結果コードを担当します。`bin/dotdeployer.js` は返されたコードを適用し、未捕捉の起動エラーを処理します。CLI 層に検証ロジックは置きません。
 - **`commands/`** はユーザー向けコマンドを 1 つずつ実装します。ここにある関数は MCP サーバーからも API として呼ばれるため、コンソール出力を含めないでください。
 - **`core/`** はプロバイダーやコマンドを知らないプリミティブを置きます。
 - **`project/`** は「プロジェクトディレクトリまたは GitHub リポジトリ」を、デプロイ対象ファイルの一覧と解析済み設定に変換する役割を持ちます。
@@ -76,7 +82,7 @@ src/
 ## コマンドの流れ
 
 1. `bin/dotdeployer.js` が `src/cli/index.js` の `main()` を呼びます。
-2. `parseArgs()` がオプションの組み合わせを検証します（例: `--execute` には `--yes` が必要）。使用法エラーは終了コード 2 です。
+2. `src/cli/args.js` の `parseArgs()` が `src/cli/spec.js` の定義を使ってコマンド別オプションを検証し、`src/cli/help.js` が全体 / コマンド別ヘルプを生成します。使用法エラーは終了コード 2 です。
 3. `withProjectSource()`（`src/project/source.js`）が対象を解決します。ローカルディレクトリか、`--repo` 指定時の一時 clone です。一時 clone は処理後に削除します。
 4. `scanProjectFiles()`（`src/project/files.js`）がデプロイ対象を列挙します。Git リポジトリでは未追跡ファイルを含む `git ls-files`、それ以外ではフィルタ付きのディレクトリ走査です。プロジェクト外へ出るリンクを拒否し、20 MB に達するファイルがあれば即座に中止します。これは**設定を解析する前**に実行されます。
 5. `checkProject()`（`src/commands/check.js`）が `validateGenericProject()` を実行し、続けて `src/providers/index.js` の選択されたアダプターを、`src/project/config.js` の `parseConfigFile()` を使って実行します。検出結果は `issue()` で集め、`summarizeIssues()` で集計します。
@@ -85,7 +91,7 @@ src/
    - `runLocalBuild()` — デプロイ対象を一時ディレクトリへコピーし、必要なら lockfile から依存を取得し、ビルドコマンドを 1 つ決定して実行し、生成物を `src/core/output.js` で再検査
    - `emulateProject()` — プロバイダーの公式 CLI を実行し、`emulationLevel` と `limitations` を記録
    - `verifyProject()` / `deployProject()` — CLI の認証確認、環境の dry-run、そして `--execute --yes` がある場合のみ実際の publish
-7. `src/cli/index.js` がレポート（人間向けテキスト、`--json`、`src/reporting/sarif.js` 経由の SARIF）を出力し、終了コードを返します。
+7. `src/cli/output.js` がレポート（人間向けテキストまたは `--json`）を整形し、SARIF は `src/reporting/sarif.js` 経由でシリアライズします。`src/cli/index.js` は handler を選択して終了コードを返します。
 
 ## 不変条件
 
