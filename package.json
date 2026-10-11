@@ -1,0 +1,23 @@
+{
+  "name": "dotdeployer",
+  "version": "0.1.0",
+  "description": "Strict local deployment preflight and build checks for popular hosting platforms",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "dotdeployer": "./bin/dotdeployer.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node ./bin/dotdeployer.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "jsonc-parser": "^3.3.1",
+    "smol-toml": "^1.9.0",
+    "yaml": "^2.9.1"
+  },
+  "license": "MIT"
+}
