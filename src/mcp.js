@@ -6,6 +6,7 @@ import { PROVIDERS, VERSION } from './constants.js';
 import { checkProject } from './check.js';
 import { runLocalBuild } from './build.js';
 import { emulateProject } from './emulation.js';
+import { auditProject } from './audit.js';
 import { providerInfo } from './providers/index.js';
 import { withProjectSource } from './source.js';
 
@@ -24,6 +25,22 @@ const TOOLS = [
         provider: { type: 'string', enum: providerEnum, description: 'Provider adapter to check; defaults to auto-detection.' },
         plan: { type: 'string', description: 'Assumed plan profile, such as free or paid. Defaults to free.' },
         strict: { type: 'boolean', description: 'Treat all warnings as errors.' },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'audit_project',
+    description: 'Read-only deployment security audit. Scans deployable text files for high-confidence committed credential patterns and derives an environment-variable contract from source, .env.example-style files, and supported provider config. It never executes project code, contacts providers, or returns matched secret values.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Local project directory. Defaults to the current working directory.' },
+        repository: { type: 'string', description: 'Optional GitHub URL or owner/repository shorthand to clone for the audit.' },
+        ref: { type: 'string', description: 'Optional branch or tag (only valid with repository).' },
+        provider: { type: 'string', enum: providerEnum, description: 'Provider adapter to check; defaults to auto-detection.' },
+        plan: { type: 'string', description: 'Assumed plan profile, such as free or paid. Defaults to free.' },
+        strict: { type: 'boolean', description: 'Treat audit and preflight warnings as errors.' },
       },
       additionalProperties: false,
     },
@@ -121,6 +138,26 @@ export async function startMcpServer() {
             strict: args.strict ?? false,
           });
           if (args.repository) report.projectRoot = args.repository;
+        });
+        return textResult(report, !report.ok);
+      }
+      if (name === 'audit_project') {
+        let report;
+        await withProjectSource({
+          projectRoot: path.resolve(args.path ?? '.'),
+          repository: args.repository,
+          ref: args.ref,
+        }, async (projectRoot) => {
+          report = await auditProject({
+            projectRoot,
+            provider: args.provider ?? 'auto',
+            plan: args.plan ?? 'free',
+            strict: args.strict ?? false,
+          });
+          if (args.repository) {
+            report.projectRoot = args.repository;
+            report.preflight.projectRoot = args.repository;
+          }
         });
         return textResult(report, !report.ok);
       }

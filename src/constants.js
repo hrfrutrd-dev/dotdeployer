@@ -1,4 +1,4 @@
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 // 20 MB (decimal). Source/deploy-context files at or above this size are
 // rejected before provider configuration parsing or build commands.

@@ -3,13 +3,16 @@ import { VERSION, PROVIDERS, PROVIDER_ALIASES, MAX_FILE_SIZE_BYTES } from './con
 import { checkProject } from './check.js';
 import { runLocalBuild } from './build.js';
 import { emulateProject } from './emulation.js';
+import { auditProject } from './audit.js';
 import { providerInfo } from './providers/index.js';
+import { reportToSarif } from './sarif.js';
 import { withProjectSource } from './source.js';
 
 const USAGE = `dotdeployer ${VERSION} — strict local deployment preflight
 
 Usage:
   dotdeployer check [path] [options]
+  dotdeployer audit [path] [options]
   dotdeployer test [path] [options]
   dotdeployer emulate [path] --provider <name> [options]
   dotdeployer providers [--json]
@@ -17,6 +20,7 @@ Usage:
 
 Commands:
   check       Validate the deployable project context; never contacts a hosting API.
+  audit       Check deployable files for committed credentials and undocumented or publicly exposed environment variables.
   test        Same preflight; optionally run a build command in a temporary copy.
   emulate     Use the provider's official local build/validation CLI where available; never deploy.
   providers   List provider adapters and their supported config formats.
@@ -33,10 +37,12 @@ Options:
   --install                   Install from lockfile for local build / Wrangler steps; Vercel/Railpack manage installs themselves
   --timeout <seconds>         Per-command timeout for --build / emulate (default: 600; max: 1800)
   --json                      Print machine-readable JSON
+  --sarif                     Print SARIF 2.1.0 for check or audit (cannot be combined with --json)
   -h, --help                  Show this help
   -V, --version               Print version
 
 The 20 MB (20,000,000-byte) per-file limit is enforced on source files before config parsing/builds; known generated outputs are rescanned after local builds.
+Audit scans only deployable text files, never prints matched secret values, and does not execute project code.
 A successful check is a conservative preflight, not a full cloud runtime emulator.`;
 
 function parseArgs(argv) {
@@ -51,6 +57,7 @@ function parseArgs(argv) {
     build: false,
     install: false,
     json: false,
+    sarif: false,
     timeoutSeconds: 600,
     pathProvided: false,
   };
@@ -77,6 +84,7 @@ function parseArgs(argv) {
     else if (arg === '--build') options.build = true;
     else if (arg === '--install') options.install = true;
     else if (arg === '--json') options.json = true;
+    else if (arg === '--sarif') options.sarif = true;
     else if (arg === '-h' || arg === '--help') options.help = true;
     else if (arg === '-V' || arg === '--version') options.version = true;
     else if (arg.startsWith('-')) throw new Error(`Unknown option: ${arg}`);
@@ -93,6 +101,9 @@ function parseArgs(argv) {
   if (options.ref && !options.repository) throw new Error('--ref requires --repo.');
   if (options.install && !options.build && command !== 'emulate') throw new Error('--install requires --build or the emulate command.');
   if (options.build && command !== 'test' && command !== 'check') throw new Error('--build is only available with check or test.');
+  if (options.json && options.sarif) throw new Error('Use either --json or --sarif, not both.');
+  if (options.sarif && !['check', 'audit'].includes(command)) throw new Error('--sarif is available with check or audit.');
+  if (options.sarif && options.build) throw new Error('--sarif cannot be combined with --build.');
   return options;
 }
 
@@ -134,6 +145,23 @@ function printCheckReport(report, { json = false } = {}) {
     if (item.remediation) process.stdout.write(`  Fix: ${item.remediation}\n`);
   }
   process.stdout.write('\nA PASS is a local preflight, not a guarantee of cloud behavior. Provider quotas, secrets, networks, and managed runtime details may differ.\n');
+}
+
+function printAuditReport(report, { json = false } = {}) {
+  if (json) {
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+    return;
+  }
+  printCheckReport(report.preflight);
+  process.stdout.write(`\nDeployment security audit: ${report.ok ? 'PASS' : 'FAIL'} — ${report.summary.errors} error(s), ${report.summary.warnings} warning(s), ${report.summary.infos} info\n`);
+  process.stdout.write(`Deploy-context files: ${report.audit.filesInContext}; text scanned: ${report.audit.scannedTextFiles}; binary skipped: ${report.audit.skippedBinaryFiles}\n`);
+  process.stdout.write(`Environment variables: ${report.environment.referenced} referenced, ${report.environment.documented} documented, ${report.environment.configured} configured\n`);
+  for (const item of report.auditIssues) {
+    const location = item.file ? ` ${item.file}${item.line ? `:${item.line}` : ''}:` : '';
+    process.stdout.write(`${issuePrefix(item.severity)} [${item.code}]${location} ${item.message}\n`);
+    if (item.remediation) process.stdout.write(`  Fix: ${item.remediation}\n`);
+  }
+  process.stdout.write('\nSecret values are never printed. This is a high-confidence static scan of deployable text files, not proof that every credential or runtime environment issue has been found.\n');
 }
 
 function printBuildReport(report, { json = false } = {}) {
@@ -221,7 +249,7 @@ export async function main(argv = process.argv.slice(2)) {
     await startMcpServer();
     return 0;
   }
-  if (!['check', 'test', 'emulate'].includes(options.command)) {
+  if (!['check', 'audit', 'test', 'emulate'].includes(options.command)) {
     process.stderr.write(`Unknown command: ${options.command}\n\n${USAGE}\n`);
     return 2;
   }
@@ -253,6 +281,20 @@ export async function main(argv = process.argv.slice(2)) {
         }
         printEmulationReport(report, { json: options.json });
         if (!report.ok) exitCode = 1;
+      } else if (options.command === 'audit') {
+        const report = await auditProject({
+          projectRoot,
+          provider: options.provider,
+          plan: options.plan,
+          strict: options.strict,
+        });
+        if (options.repository) {
+          report.projectRoot = options.repository;
+          report.preflight.projectRoot = options.repository;
+        }
+        if (options.sarif) process.stdout.write(`${JSON.stringify(reportToSarif(report), null, 2)}\n`);
+        else printAuditReport(report, { json: options.json });
+        if (!report.ok) exitCode = 1;
       } else if (options.build) {
         const output = options.json ? undefined : (stream, text) => {
           (stream === 'stderr' ? process.stderr : process.stdout).write(text);
@@ -277,7 +319,8 @@ export async function main(argv = process.argv.slice(2)) {
           strict: options.strict,
         });
         if (options.repository) report.projectRoot = options.repository;
-        printCheckReport(report, { json: options.json });
+        if (options.sarif) process.stdout.write(`${JSON.stringify(reportToSarif(report), null, 2)}\n`);
+        else printCheckReport(report, { json: options.json });
         if (!report.ok) exitCode = 1;
       }
     });
