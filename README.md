@@ -1,6 +1,6 @@
 # dotdeployer
 
-複数のホスティングサービスへデプロイする前に、**Git に載るプロジェクトをローカルで厳しめに検査し、必要なら実際のビルドコマンドを一時コピー上で実行する** CLI / MCP サーバーです。
+複数のホスティングサービスへデプロイする前に、**Git に載るプロジェクトをローカルで厳しめに検査し、credential / 環境変数の公開リスクを監査し、必要なら実際のビルドコマンドを一時コピー上で実行する** CLI / MCP サーバーです。
 
 対応アダプター: Render、Railway、Vercel、Cloudflare Workers / Pages（Wrangler）、Google Apps Script（GAS）。
 
@@ -41,6 +41,12 @@ dotdeployer check . --provider cloudflare --json
 # 警告も失敗扱いにする
 dotdeployer check . --provider vercel --strict
 
+# デプロイ対象に含まれる credential / 環境変数のリスクを静的監査
+dotdeployer audit . --provider vercel
+
+# GitHub Code Scanning などに渡せる SARIF 2.1.0 を出力
+dotdeployer audit . --sarif > dotdeployer.sarif
+
 # 検査に加えて、一時コピー上でビルドを実行
 dotdeployer test . --provider vercel --build
 
@@ -53,9 +59,33 @@ dotdeployer emulate . --provider cloudflare --timeout 900
 
 コマンド名は `check` と `test` のどちらでも同じです。`--build` を付けない限り、プロジェクトのビルドやインストールは実行しません。プロバイダー指定のない場合は、対応設定ファイルを自動検出し、複数見つかればそれらをすべて静的検査します。ビルド時に複数プロバイダーが検出された場合は、対象を一つに絞るため明示指定が必要です。
 
+`audit` はビルドを実行しない読み取り専用の追加検査です。`--strict` を指定すると、未文書化の環境変数や「公開される可能性がある API key」のような警告もエラーになります。`--sarif` は `check` または `audit` でのみ使え、`--json` とは同時に指定できません。
+
 ### 20 MB のハード上限
 
 デプロイ対象の **個別ファイルが 20,000,000 bytes 以上** の場合、Git 上のソースは設定解析・ビルドより前に検査を停止します。これは合計サイズではなくファイル単位の固定上限です。Git リポジトリでは追跡ファイルと未追跡ファイルを対象にし、`.gitignore` 等で除外されたファイルは Git デプロイ対象に含めません。Git LFS ポインターは実データのサイズを確認できないため、エラーとして停止します。設定から特定できる静的 publish directory / Vercel output / Wrangler dry-run output も、ビルド後に同じ上限で再スキャンします。Docker image の全レイヤーや各社の隠し build artifact までサイズ検査できるわけではありません。
+
+## デプロイセキュリティ監査と環境変数契約
+
+`audit` は **実際に Git デプロイコンテキストへ入るテキストファイル**だけを読み、プロジェクトのコード・install script・外部 CLI を実行しません。高信頼度の credential パターン（private key、AWS access key ID、GitHub / GitLab / Slack token、Stripe secret key、Google API key、`.npmrc` / `.netrc` の literal credential）と、private SSH key・keystore のようなファイル名を検査します。
+
+- マッチした credential の**値は標準出力・JSON・SARIF に一切出力しません**。ファイル名、行番号、ルール名、修正案だけが返ります。
+- `audit` が `error` を出した場合は、値を無効化・rotate して Git の履歴からも除去してください。単に次の commit で消すだけでは不十分なことがあります。
+- binary と認識したファイル、Git で無視されてデプロイ対象に含まれないファイル、未知の credential 形式、git history、外部 secret manager の値は検査範囲外です。したがって PASS は secret が絶対に存在しないことの証明ではありません。
+
+加えて、JavaScript / TypeScript / Vue / Svelte / Astro の `process.env.NAME`、`import.meta.env.NAME`、`Deno.env.get("NAME")`、`Bun.env.NAME` を静的に収集し、`.env.example`、`.env.sample`、`.env.template`、および対応プロバイダー設定の非 secret 環境変数宣言と照合します。未文書化の変数を warning として返し、`NEXT_PUBLIC_`、`VITE_`、`REACT_APP_`、`NUXT_PUBLIC_`、`GATSBY_`、`EXPO_PUBLIC_`、`VUE_APP_`、`PUBLIC_`、`ASTRO_PUBLIC_` の public prefix が password / token / secret / database URL などに付いている場合は error にします。`API_KEY` のように公開を意図する場合も warning が出るため、origin / referrer / API 制限を確認してください。
+
+```sh
+# 値を置かず、必要なキー名だけをドキュメント化
+printf 'DATABASE_URL=\nINTERNAL_API_URL=\n' > .env.example
+
+dotdeployer audit . --provider vercel --strict
+
+# CI の code-scanning uploader に渡すファイルを作る
+dotdeployer audit . --sarif > dotdeployer.sarif
+```
+
+SARIF には位置情報を持つ issue を file / line として出力します。アップロード方法は利用する CI / code-scanning integration の手順に従ってください。
 
 ## 対応範囲
 
@@ -66,7 +96,7 @@ dotdeployer emulate . --provider cloudflare --timeout 900
 | Vercel | `vercel.json` | JSON、build/output directory、rewrites / redirects / headers、functions の代表的な型。Free 想定で cron を使う場合は現在のプラン制限を別途確認する警告を出します。 |
 | Cloudflare Workers / Pages | `wrangler.toml` / `wrangler.json` / `wrangler.jsonc` | TOML / JSON / JSONC、main / assets のパス、vars、build、互換日付。互換日付が未指定の場合はローカルポリシーでエラーにします。 |
 | Google Apps Script | `appsscript.json` / `.clasp.json` | マニフェスト、`rootDir`、runtime、OAuth scopes、Web App 設定の代表項目。ビルド時に `.gs` の JavaScript 構文を解析しますが、Apps Script API を実行するものではありません。 |
-| 共通 | `package.json`、lockfile、`Dockerfile` | JSON / scripts / package manager と lockfile の整合性、Dockerfile の `FROM` の有無。 |
+| 共通 | `package.json`、lockfile、`Dockerfile`、デプロイ対象テキスト | JSON / scripts / package manager と lockfile の整合性、Dockerfile の `FROM`、`audit` による高信頼度 credential / 環境変数契約の検査。 |
 
 ### 公式ローカル runner を使う `emulate`
 
@@ -94,7 +124,7 @@ dotdeployer emulate ./worker --provider cloudflare
 
 ## MCP サーバー
 
-`dotdeployer mcp` は MCP の stdio サーバーを起動します。Claude Code などの MCP クライアントから、読み取り専用の `preflight_check`、任意実行の `run_local_build`、公式 CLI を使う `emulate_project`、`list_providers` を利用できます。`preflight_check` / `run_local_build` / `emulate_project` は GitHub の `repository` と任意の `ref` を受け付けます。`emulate_project` は対応 CLI が必要で、対応外の完全な runtime 再現を装って成功扱いにはしません。
+`dotdeployer mcp` は MCP の stdio サーバーを起動します。Claude Code などの MCP クライアントから、読み取り専用の `preflight_check`、credential / 環境変数を読む `audit_project`、任意実行の `run_local_build`、公式 CLI を使う `emulate_project`、`list_providers` を利用できます。`preflight_check` / `audit_project` / `run_local_build` / `emulate_project` は GitHub の `repository` と任意の `ref` を受け付けます。`audit_project` は project code を実行せず、検出した secret value を結果に返しません。`emulate_project` は対応 CLI が必要で、対応外の完全な runtime 再現を装って成功扱いにはしません。
 
 Claude Code の MCP 設定例（`/absolute/path/to/dotdeployer` は実際のパスに置換）:
 
@@ -120,6 +150,7 @@ Claude Code の MCP 設定例（`/absolute/path/to/dotdeployer` は実際のパ�
 ## 検査範囲と限界
 
 - `check` は設定とファイルのローカル検査のみを行い、デプロイ API 呼び出し、認証検証、ホスティング環境へのアップロードは行いません。
+- `audit` は deployable text file の高信頼度パターンと静的な環境変数参照だけを調べます。secret history、binary / ignored file、難読化・分割された値、runtime で動的に作られる変数、provider secret manager の実値を網羅するものではありません。
 - `--build` は設定に書かれた build command / `package.json` の `build` script / Dockerfile build のいずれかを一時コピー上で実行します。全プロバイダーの install / build / runtime / healthcheck 手順を再現するわけではありません。
 - 管理された Node / Python / Go / Java ランタイム、ネットワーク、DNS、リージョン、環境変数・secret、OAuth 同意、サービス間通信、データベース、コールドスタート、CPU / メモリ / 実行時間 / cron / API クォータなどは完全には再現できません。
 - 無料プランで静的に判断できる既知の制約のみを強制し、変更頻度の高いクォータや契約条件は推測でエラーにせず、警告・未検証にします。
@@ -132,5 +163,6 @@ Claude Code の MCP 設定例（`/absolute/path/to/dotdeployer` は実際のパ�
 
 ```sh
 npm test
+node ./bin/dotdeployer.js audit . --provider generic
 node ./bin/dotdeployer.js --help
 ```

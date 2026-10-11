@@ -1,6 +1,6 @@
 {
   "name": "dotdeployer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Strict local deployment preflight and build checks for popular hosting platforms",
   "type": "module",
   "engines": {
