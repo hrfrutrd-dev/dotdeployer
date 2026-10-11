@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    name: tests (python ${{ matrix.python-version }})
+    name: tests (python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,8 +24,6 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         include:
           - os: macos-latest
-            python-version: "3.11"
-          - os: windows-latest
             python-version: "3.11"
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +75,7 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install -e .
-      - name: Scaffold, plan, apply, verify and roll back
+      - name: Scaffold a project and walk the whole lifecycle
         run: |
           set -eux
           export HOME="$(mktemp -d)"
@@ -89,19 +87,28 @@ jobs:
           dotdeployer doctor
           dotdeployer config validate
           dotdeployer plan
-          test "$(dotdeployer status --check; echo $?)" = 12
+
+          pending=$(dotdeployer status --check >/dev/null; echo $?)
+          test "$pending" = 12
+
+          # a pre-existing file gives `apply` something to back up
+          echo "# existing zshrc" > "$HOME/.zshrc"
 
           dotdeployer apply --yes
-          dotdeployer status             # 0 when everything is in sync
+          dotdeployer status            # 0 once everything is in sync
           dotdeployer list --status
           dotdeployer report -o report.html
           test -s report.html
 
-          # drift is detected, and --strict turns it into a failure
-          echo "appended" >> "$HOME/.zshrc" 2>/dev/null || true
+          # local edits are reported as drift, and --strict turns that into a failure
+          echo "# drift" >> "$HOME/.zshrc"
+          drift=$(dotdeployer diff --strict >/dev/null; echo $?)
+          test "$drift" = 11
           dotdeployer plan --all
 
           dotdeployer rollback --last --yes
+          grep -q "# existing zshrc" "$HOME/.zshrc"
+
           dotdeployer uninstall --yes
 
       - name: A minimal project is valid too
@@ -113,3 +120,24 @@ jobs:
           cd "$HOME/dotfiles"
           dotdeployer doctor
           dotdeployer config validate
+
+  windows:
+    name: windows (best effort)
+    runs-on: windows-latest
+    continue-on-error: true   # symlink creation needs privileges the runner may not grant
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - name: Scaffold and plan a project
+        shell: bash
+        run: |
+          set -eux
+          export HOME="$(mktemp -d)"
+          mkdir -p "$HOME"
+          dotdeployer init "$HOME/dotfiles"
+          cd "$HOME/dotfiles"
+          dotdeployer doctor
+          dotdeployer plan
