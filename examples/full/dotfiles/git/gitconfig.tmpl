@@ -1,0 +1,30 @@
+# ~/.gitconfig - rendered by dotdeployer, do not edit the deployed copy
+[user]
+	name  = {{ git_name }}
+	email = {{ git_email | default("unknown@example.com") }}
+
+[init]
+	defaultBranch = main
+
+[core]
+	editor = {{ editor }}
+	pager  = {{ pager | default("less") }}
+
+[credential]
+{% if os == "darwin" %}
+	helper = osxkeychain
+{% else %}
+	helper = {{ credential_helper }}
+{% endif %}
+
+{% for host in extra_hosts %}
+[url "git@{{ host }}:"]
+	insteadOf = https://{{ host }}/
+{% endfor %}
+
+{% if work | default(false) %}
+[commit]
+	gpgSign = false
+[push]
+	default = current
+{% endif %}

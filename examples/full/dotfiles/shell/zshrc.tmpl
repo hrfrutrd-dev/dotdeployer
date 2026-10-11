@@ -1,0 +1,18 @@
+# ~/.zshrc - rendered by dotdeployer (secret lookups happen at render time)
+export EDITOR={{ editor }}
+export PATH="$HOME/.local/bin:$PATH"
+
+{% if os == "darwin" %}
+eval "$(brew shellenv)"
+{% endif %}
+
+# theme token lives in the secret store, never in git
+export SHELL_THEME={{ secret("shell_theme", "default") }}
+
+{% if work | default(false) %}
+export WORK=1
+source "$HOME/.config/work/env"
+{% endif %}
+
+alias ll='ls -lah'
+alias gs='git status -sb'

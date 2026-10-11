@@ -1,0 +1,9 @@
+# ~/.zshenv - rendered with the values from [vars]
+{% if os == "darwin" %}
+export HOMEBREW_NO_ANALYTICS=1
+{% elif os == "linux" %}
+export XDG_CONFIG_HOME="$HOME/.config"
+{% endif %}
+
+export EDITOR={{ editor }}
+export PAGER={{ pager }}

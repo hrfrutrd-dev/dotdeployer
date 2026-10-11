@@ -1,0 +1,75 @@
+# A realistic personal setup: profiles, tags, templates, secrets, hooks,
+# per-entry strategies and permissions.
+#
+#   cd examples/full && dotdeployer plan --diff -p work
+
+[settings]
+source_root      = "dotfiles"
+strategy         = "backup"     # anything replaced is stored in .dotdeployer/backups
+backup_keep      = 10
+prune            = true         # targets of removed entries are cleaned up
+strict_templates = false        # set to true to fail on undefined variables
+
+[vars]
+editor            = "nvim"
+credential_helper = "cache --timeout=86400"
+extra_hosts       = ["github.com", "gitlab.com"]
+
+# ── profiles ────────────────────────────────────────────────────────────────────
+[profiles.personal]
+description = "home machines"
+vars        = { git_email = "me@example.com", git_name = "Example User" }
+
+[profiles.work]
+description = "work laptop and CI"
+vars        = { git_email = "me@company.com", git_name = "Example User", work = true }
+tags        = ["work"]
+
+# ── secrets ─────────────────────────────────────────────────────────────────────
+[secrets]
+order = ["env", "file"]      # first backend that knows a name wins
+file  = "secrets.env"        # git-ignored, one NAME=value per line
+prefix = "DOTDEPLOYER_SECRET_"   # environment variables are looked up with this prefix
+
+# ── entries ─────────────────────────────────────────────────────────────────────
+[files]
+"~/.aliases" = { source = "shell/aliases", tags = ["shell"] }
+"~/.vimrc"   = { source = "vim/vimrc", disabled = true }   # shown by `list`, never deployed
+
+# longer entries read better as their own table
+[files."~/.gitconfig"]
+source   = "git/gitconfig.tmpl"
+mode     = "template"
+tags     = ["git"]
+profiles = ["personal", "work"]
+
+[files."~/.zshrc"]
+source  = "shell/zshrc.tmpl"
+mode    = "template"
+tags    = ["shell"]
+secrets = ["shell_theme"]
+
+# a whole directory, symlinked
+[files."~/.config/nvim"]
+source    = "nvim"
+tags      = ["nvim"]
+platforms = ["linux", "darwin"]
+
+# ssh is picky about permissions and should never be merged with anything else
+[files."~/.ssh/config"]
+source      = "ssh/config.tmpl"
+mode        = "template"
+tags        = ["ssh"]
+permissions = "600"
+strategy    = "override"
+
+[dirs]
+"~/.local/bin"      = {}
+"~/.cache/dotfiles" = { permissions = "700" }
+
+# ── hooks ───────────────────────────────────────────────────────────────────────
+[hooks]
+pre_apply  = ["echo 'deploying to {{ hostname }} ({{ profiles | join(', ') }})'"]
+post_entry = ["./hooks/reload-shell.sh {{ entry }}"]
+post_apply = ["echo '{{ applied }} file(s) deployed, {{ failed }} failed'"]
+on_error   = ["echo 'apply failed: {{ error }}' >&2"]

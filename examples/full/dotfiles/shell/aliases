@@ -1,0 +1,5 @@
+# ~/.aliases - symlinked, so this file is the live one
+alias gco='git checkout'
+alias gd='git diff --stat'
+alias k='kubectl'
+alias dc='docker compose'

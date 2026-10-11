@@ -1,0 +1,15 @@
+# ~/.zshrc - symlinked here by dotdeployer
+# Edit this file in the repository; the symlink makes the change instant.
+
+alias ll='ls -lah'
+alias gs='git status -sb'
+
+export PAGER=less
+export PATH="$HOME/.local/bin:$PATH"
+
+# keep history tidy
+HISTFILE=~/.zsh_history
+HISTSIZE=10000
+SAVEHIST=10000
+setopt SHARE_HISTORY
+setopt HIST_IGNORE_DUPS

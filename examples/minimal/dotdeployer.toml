@@ -1,0 +1,20 @@
+# The smallest useful dotdeployer project.
+#
+#   cd examples/minimal && dotdeployer plan --diff
+
+[settings]
+source_root = "dotfiles"
+
+[vars]
+editor = "nvim"
+pager  = "less"
+
+[files]
+# shorthand: the value is a path inside source_root, deployed as a symlink
+"~/.zshrc" = "shell/zshrc"
+
+# the table form exposes the mode, tags and per-entry variables
+"~/.zshenv" = { source = "shell/zshenv", mode = "template", tags = ["shell"] }
+
+[dirs]
+"~/.local/bin" = {}

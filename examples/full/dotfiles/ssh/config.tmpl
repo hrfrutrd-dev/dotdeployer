@@ -1,0 +1,11 @@
+# ~/.ssh/config - deployed with permissions = "600"
+Host *
+	ServerAliveInterval 60
+	AddKeysToAgent yes
+
+Host github.com
+	User git
+	IdentityFile ~/.ssh/id_ed25519
+{% if os == "darwin" %}
+	UseKeychain yes
+{% endif %}

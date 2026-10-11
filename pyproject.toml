@@ -1,0 +1,84 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dotdeployer"
+version = "1.0.0"
+description = "Declarative, transactional dotfile deployment with profiles, templating, secrets and rollback."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "hrfrutrd-dev" }]
+keywords = ["dotfiles", "deploy", "symlink", "templating", "configuration-management"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Systems Administration",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.optional-dependencies]
+toml = ["tomli>=2.0; python_version < '3.11'"]
+dev = ["pytest>=7", "ruff>=0.5"]
+
+[project.urls]
+Homepage = "https://github.com/hrfrutrd-dev/dotdeployer"
+Issues = "https://github.com/hrfrutrd-dev/dotdeployer/issues"
+Changelog = "https://github.com/hrfrutrd-dev/dotdeployer/blob/main/CHANGELOG.md"
+
+[project.scripts]
+dotdeployer = "dotdeployer.cli:main"
+dd = "dotdeployer.cli:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+dotdeployer = ["data/*.html", "data/*.json"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# A pragmatic, bug-focused set: pycodestyle, pyflakes, import order, bugbear,
+# simplify and ruff's own rules.  Typing modernisation (UP006/UP045/...) is
+# intentionally off because the package still supports Python 3.9.
+select = ["E", "F", "W", "I", "B", "SIM", "RUF", "PIE", "FURB", "PLW"]
+ignore = [
+  "E501",     # long lines are handled by the formatter, not the linter
+  "UP006", "UP007", "UP035", "UP037", "UP045",  # keep `List[...]`-style for py3.9
+  "BLE001",   # broad excepts are deliberate around external tools
+  "S110",     # try/except/pass when probing the environment
+  "B017",     # tests assert on our own exception hierarchy
+  "RUF034",   # a few explicit if/else branches are clearer
+  "RUF012",   # mutable class attributes are intentional in the test helpers
+  "PLW1510",  # subprocess.run(check=...) is handled by run_command
+  "PLW2901",  # reusing the loop variable for normalisation is fine
+  "SIM103", "SIM105", "SIM108", "SIM117", "SIM212",  # explicit branches read better here
+  "PLW0108",  # tiny lambdas keep the call sites uniform
+  "RUF059",   # tests intentionally ignore parts of a tuple
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402", "F401", "B011"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

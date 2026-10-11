@@ -1,0 +1,9 @@
+# Automatically merged when the machine's hostname is 'laptop'
+# (dotdeployer looks for hosts/<hostname>.toml, hosts/<hostname>.json
+#  and host-<hostname>.toml).
+
+[vars]
+pager = "bat"
+
+[settings]
+strict_templates = true

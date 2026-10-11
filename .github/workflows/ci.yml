@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests (python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python-version: "3.11"
+          - os: windows-latest
+            python-version: "3.11"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install (with TOML support on old Pythons)
+        run: python -m pip install --upgrade pip ".[toml]"
+
+      - name: Unit tests
+        run: python -m unittest discover -s tests -t . -v
+
+  lint:
+    name: lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip ruff
+      - run: ruff check src tests
+
+  package:
+    name: build and install the package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install --upgrade pip build
+      - run: python -m build
+      - name: Install the wheel into a clean environment
+        run: |
+          python -m venv /tmp/dd-venv
+          /tmp/dd-venv/bin/python -m pip install dist/*.whl
+          /tmp/dd-venv/bin/dotdeployer --version
+          /tmp/dd-venv/bin/dd --version
+
+  smoke:
+    name: end-to-end smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -e .
+      - name: Scaffold, plan, apply, verify and roll back
+        run: |
+          set -eux
+          export HOME="$(mktemp -d)"
+          mkdir -p "$HOME"
+
+          dotdeployer init "$HOME/dotfiles"
+          cd "$HOME/dotfiles"
+
+          dotdeployer doctor
+          dotdeployer config validate
+          dotdeployer plan
+          test "$(dotdeployer status --check; echo $?)" = 12
+
+          dotdeployer apply --yes
+          dotdeployer status             # 0 when everything is in sync
+          dotdeployer list --status
+          dotdeployer report -o report.html
+          test -s report.html
+
+          # drift is detected, and --strict turns it into a failure
+          echo "appended" >> "$HOME/.zshrc" 2>/dev/null || true
+          dotdeployer plan --all
+
+          dotdeployer rollback --last --yes
+          dotdeployer uninstall --yes
+
+      - name: A minimal project is valid too
+        run: |
+          set -eux
+          export HOME="$(mktemp -d)"
+          mkdir -p "$HOME"
+          dotdeployer init "$HOME/dotfiles" --minimal
+          cd "$HOME/dotfiles"
+          dotdeployer doctor
+          dotdeployer config validate
