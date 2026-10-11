@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { lstat, readFile, readdir, readlink, realpath, stat as statPath } from 'node:fs/promises';
 import path from 'node:path';
-import { MAX_FILE_SIZE_BYTES, IGNORED_DIRS_WITHOUT_GIT } from './constants.js';
-import { DotdeployerError } from './errors.js';
+import { MAX_FILE_SIZE_BYTES, IGNORED_DIRS_WITHOUT_GIT } from '../core/constants.js';
+import { DotdeployerError } from '../core/errors.js';
 
 function runGit(args, cwd) {
   try {

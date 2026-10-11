@@ -1,8 +1,8 @@
 import path from 'node:path';
-import { MAX_FILE_SIZE_BYTES, VERSION } from './constants.js';
-import { DotdeployerError, issue, summarizeIssues } from './errors.js';
-import { scanProjectFiles } from './files.js';
-import { detectProviders, normalizeProvider, validateGenericProject, validateProvider } from './providers/index.js';
+import { MAX_FILE_SIZE_BYTES, VERSION } from '../core/constants.js';
+import { DotdeployerError, issue, summarizeIssues } from '../core/errors.js';
+import { scanProjectFiles } from '../project/files.js';
+import { detectProviders, normalizeProvider, validateGenericProject, validateProvider } from '../providers/index.js';
 
 export async function checkProject({
   projectRoot = process.cwd(),

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { main } from '../src/cli.js';
+import { main } from '../src/cli/index.js';
 
 main()
   .then((exitCode) => {

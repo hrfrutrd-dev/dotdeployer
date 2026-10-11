@@ -4,9 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, rm, symlink, truncate, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { checkProject } from '../src/check.js';
-import { copyDeployContext, runLocalBuild } from '../src/build.js';
-import { scanProjectFiles } from '../src/files.js';
+import { checkProject } from '../../src/commands/check.js';
+import { copyDeployContext, runLocalBuild } from '../../src/commands/build.js';
+import { scanProjectFiles } from '../../src/project/files.js';
 
 async function makeProject() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dotdeployer-test-'));

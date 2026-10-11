@@ -1,10 +1,10 @@
 import { open, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { checkProject } from './check.js';
-import { parseConfigFile } from './config.js';
-import { VERSION } from './constants.js';
-import { issue, summarizeIssues } from './errors.js';
-import { scanProjectFiles } from './files.js';
+import { parseConfigFile } from '../project/config.js';
+import { VERSION } from '../core/constants.js';
+import { issue, summarizeIssues } from '../core/errors.js';
+import { scanProjectFiles } from '../project/files.js';
 
 const MAX_SECRET_FINDINGS = 100;
 const MAX_ENVIRONMENT_SOURCES = 20;

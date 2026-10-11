@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { DotdeployerError } from './errors.js';
+import { DotdeployerError } from '../core/errors.js';
 
 function normalizeGithubRepository(repository) {
   const value = String(repository ?? '').trim();

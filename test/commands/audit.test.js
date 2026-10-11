@@ -5,10 +5,10 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { auditProject } from '../src/audit.js';
-import { reportToSarif } from '../src/sarif.js';
+import { auditProject } from '../../src/commands/audit.js';
+import { reportToSarif } from '../../src/reporting/sarif.js';
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 async function makeProject(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dotdeployer-audit-test-'));

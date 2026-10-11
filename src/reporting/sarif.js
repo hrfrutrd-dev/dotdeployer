@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { VERSION } from './constants.js';
+import { VERSION } from '../core/constants.js';
 
 function sarifLevel(severity) {
   if (severity === 'error') return 'error';

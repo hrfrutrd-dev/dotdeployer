@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { checkProject } from '../src/check.js';
-import { copyDeployContext } from '../src/build.js';
-import { scanProjectFiles } from '../src/files.js';
+import { checkProject } from '../../src/commands/check.js';
+import { copyDeployContext } from '../../src/commands/build.js';
+import { scanProjectFiles } from '../../src/project/files.js';
 
 async function tempProject(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dotdeployer-files-'));

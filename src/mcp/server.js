@@ -2,14 +2,14 @@ import path from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { PROVIDERS, VERSION } from './constants.js';
-import { checkProject } from './check.js';
-import { runLocalBuild } from './build.js';
-import { emulateProject } from './emulation.js';
-import { auditProject } from './audit.js';
-import { verifyProject } from './deployment.js';
-import { providerInfo } from './providers/index.js';
-import { withProjectSource } from './source.js';
+import { PROVIDERS, VERSION } from '../core/constants.js';
+import { checkProject } from '../commands/check.js';
+import { runLocalBuild } from '../commands/build.js';
+import { emulateProject } from '../commands/emulation.js';
+import { auditProject } from '../commands/audit.js';
+import { verifyProject } from '../commands/deployment.js';
+import { providerInfo } from '../providers/index.js';
+import { withProjectSource } from '../project/source.js';
 
 const providerEnum = ['auto', 'all', 'render', 'railway', 'vercel', 'cloudflare', 'gas', 'generic'];
 

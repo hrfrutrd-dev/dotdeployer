@@ -6,10 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import vm from 'node:vm';
 import { checkProject } from './check.js';
-import { DotdeployerError, issue } from './errors.js';
-import { scanProjectFiles } from './files.js';
-import { parseConfigFile } from './config.js';
-import { scanGeneratedOutput } from './output.js';
+import { DotdeployerError, issue } from '../core/errors.js';
+import { scanProjectFiles } from '../project/files.js';
+import { parseConfigFile } from '../project/config.js';
+import { scanGeneratedOutput } from '../core/output.js';
 
 const MAX_LOG_CHARS = 250_000;
 
