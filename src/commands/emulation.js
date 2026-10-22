@@ -207,12 +207,21 @@ async function runCloudflare(root, workdir, tempParent, files, report, timeoutMs
   }
   const { data } = await parseProviderConfig(root, configs[0]);
   if (!data) return { ok: false, code: 'WRANGLER_CONFIG_INVALID', message: 'Could not read the Wrangler configuration.' };
-  if (typeof data.main === 'string' && data.main.trim()) {
-    const version = await getCliVersion(report, 'wrangler', workdir, timeoutMs, onOutput, env);
+  const configDirectory = path.posix.dirname(configs[0].path);
+  const cwd = path.resolve(workdir, configDirectory === '.' ? '' : configDirectory);
+  const localFiles = configDirectory === '.' ? files : files
+    .filter((file) => file.path.startsWith(`${configDirectory}/`))
+    .map((file) => ({ ...file, path: file.path.slice(configDirectory.length + 1) }));
+  const isPages = data.pages_build_output_dir !== undefined || data.pagesBuildOutputDir !== undefined;
+
+  // Pages is identified by its output setting, not by the absence of main.
+  // Assets-only Workers have no main and still require Wrangler's dry-run.
+  if (!isPages) {
+    const version = await getCliVersion(report, 'wrangler', cwd, timeoutMs, onOutput, env);
     if (!version.ok) return version;
 
     if (install) {
-      const step = await installProjectDependencies({ projectRoot: workdir, files, timeoutMs, onOutput, env });
+      const step = await installProjectDependencies({ projectRoot: cwd, files: localFiles, timeoutMs, onOutput, env });
       if (step.skipped) {
         report.issues.push(issue('warning', 'INSTALL_SKIPPED', 'No root package.json was found; Wrangler dependency installation was skipped.'));
       } else {
@@ -228,7 +237,7 @@ async function runCloudflare(root, workdir, tempParent, files, report, timeoutMs
     }
 
     const outdir = path.join(tempParent, 'wrangler-output');
-    const result = await runStep(report, 'wrangler', ['deploy', '--dry-run', '--outdir', outdir], { cwd: workdir, timeoutMs, onOutput, env });
+    const result = await runStep(report, 'wrangler', ['deploy', '--dry-run', '--outdir', outdir], { cwd, timeoutMs, onOutput, env });
     if (!result.ok) return result;
     try {
       if (!(await stat(outdir)).isDirectory()) return { ok: false, code: 'WRANGLER_OUTPUT_INVALID', message: 'Wrangler dry-run output path is not a directory.' };

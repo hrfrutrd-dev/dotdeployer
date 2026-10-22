@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { emulateProject } from '../../src/commands/emulation.js';
@@ -136,4 +136,37 @@ test('does not claim a local Apps Script runtime exists', async (t) => {
   const result = await emulateProject({ projectRoot: root, provider: 'gas' });
   assert.equal(result.ok, false);
   assert.ok(result.issues.some((item) => item.code === 'GAS_LOCAL_RUNTIME_UNAVAILABLE'));
+});
+
+test('runs assets-only Workers from a nested Wrangler config directory', async (t) => {
+  const root = await makeProject(t);
+  const bin = path.join(root, 'fake-bin');
+  const trace = path.join(root, 'wrangler.cwd');
+  await mkdir(bin);
+  await write(root, 'apps/worker/wrangler.toml', [
+    'name = "assets-only-worker"',
+    'compatibility_date = "2026-10-01"',
+    '',
+    '[assets]',
+    'directory = "public"',
+  ].join('\n'));
+  await write(root, 'apps/worker/public/index.html', '<h1>assets</h1>');
+  await write(bin, 'wrangler', `#!/bin/sh
+if [ "$1" = "--version" ]; then echo 'wrangler 4.99.0'; exit 0; fi
+if [ "$1" = "deploy" ] && [ "$2" = "--dry-run" ]; then pwd > "$DOTDEPLOYER_WRANGLER_CWD"; mkdir -p "$4"; exit 0; fi
+exit 42
+`);
+  await chmod(path.join(bin, 'wrangler'), 0o755);
+
+  const env = {
+    ...process.env,
+    PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+    DOTDEPLOYER_WRANGLER_CWD: trace,
+  };
+  const result = await emulateProject({ projectRoot: root, provider: 'cloudflare', env, timeoutSeconds: 10 });
+  assert.equal(result.ok, true, JSON.stringify(result.issues));
+  assert.equal(result.emulationLevel, 'official-wrangler-dry-run');
+  assert.ok(result.commands.some((command) => command.name.includes('deploy --dry-run --outdir')));
+  const invocationDirectory = (await readFile(trace, 'utf8')).trim();
+  assert.ok(invocationDirectory.endsWith(path.join('apps', 'worker')), invocationDirectory);
 });

@@ -18,8 +18,8 @@ const RAILWAY_BUILDERS = new Set(['DOCKERFILE', 'RAILPACK']);
 export function normalizeProvider(value) {
   if (value === 'all' || value === 'auto' || value === 'generic') return value;
   const normalized = String(value ?? '').trim().toLowerCase();
-  const canonical = PROVIDER_ALIASES[normalized] ?? normalized;
-  if (canonical in PROVIDERS) return canonical;
+  const canonical = Object.hasOwn(PROVIDER_ALIASES, normalized) ? PROVIDER_ALIASES[normalized] : normalized;
+  if (Object.hasOwn(PROVIDERS, canonical)) return canonical;
   return undefined;
 }
 
@@ -390,70 +390,100 @@ async function validateVercel(projectRoot, files, plan, issues) {
   }
 }
 
+async function validateCloudflareSettings(projectRoot, item, data, plan, issues, {
+  fieldPrefix = '',
+  requireCompatibilityDate = false,
+} = {}) {
+  const field = (name) => `${fieldPrefix}${name}`;
+  if (data.name !== undefined) validateString(data.name, item.path, field('name'), issues, { required: true });
+  if (data.main !== undefined) {
+    if (validateString(data.main, item.path, field('main'), issues, { required: true })) {
+      await validatePathExists(projectRoot, item.dir, data.main, item.path, issues, {
+        field: field('main'), expectDirectory: false, missingSeverity: 'error',
+      });
+    }
+  }
+
+  const pagesOutput = data.pages_build_output_dir ?? data.pagesBuildOutputDir;
+  if (pagesOutput !== undefined) {
+    if (typeof pagesOutput !== 'string' || !pagesOutput.trim()) {
+      issues.push(issue('error', 'CONFIG_FIELD_TYPE', `${field('pages_build_output_dir')} must be a non-empty string.`, item.path));
+    } else {
+      await validatePathExists(projectRoot, item.dir, pagesOutput, item.path, issues, {
+        field: field('pages_build_output_dir'), expectDirectory: true, missingSeverity: 'info',
+      });
+    }
+  }
+
+  if (data.compatibility_date !== undefined && !isCalendarDate(data.compatibility_date)) {
+    issues.push(issue('error', 'CLOUDFLARE_COMPATIBILITY_DATE_INVALID', `${field('compatibility_date')} must be a real calendar date in YYYY-MM-DD format.`, item.path));
+  } else if (requireCompatibilityDate && !data.compatibility_date) {
+    issues.push(issue('error', 'CLOUDFLARE_COMPATIBILITY_DATE_REQUIRED', 'A pinned compatibility_date is required by dotdeployer strict policy.', item.path,
+      'Add a compatibility_date (YYYY-MM-DD) to avoid runtime behavior changing between local and hosted deploys.'));
+  }
+  if (data.compatibility_flags !== undefined && (!Array.isArray(data.compatibility_flags) || data.compatibility_flags.some((flag) => typeof flag !== 'string'))) {
+    issues.push(issue('error', 'CONFIG_FIELD_TYPE', `${field('compatibility_flags')} must be an array of strings.`, item.path));
+  }
+
+  if (data.vars !== undefined && (!data.vars || typeof data.vars !== 'object' || Array.isArray(data.vars))) {
+    issues.push(issue('error', 'CONFIG_FIELD_TYPE', `${field('vars')} must be an object.`, item.path));
+  } else if (data.vars) {
+    for (const [key, value] of Object.entries(data.vars)) {
+      if (typeof value !== 'string') {
+        issues.push(issue('error', 'CLOUDFLARE_VAR_INVALID', `Wrangler ${field('vars')}.${key} must be a string.`, item.path));
+      }
+      if (/(?:secret|token|password|private[_-]?key|api[_-]?key)/i.test(key)) {
+        issues.push(issue('warning', 'POSSIBLE_SECRET_IN_CONFIG', `Wrangler ${field('vars')} key ${key} looks sensitive; vars are part of project configuration and should not hold secrets.`, item.path,
+          'Store secret values with wrangler secret or the provider secret manager.'));
+      }
+    }
+  }
+
+  if (data.build !== undefined && (!data.build || typeof data.build !== 'object' || Array.isArray(data.build))) {
+    issues.push(issue('error', 'CONFIG_FIELD_TYPE', `${field('build')} must be an object.`, item.path));
+  } else if (data.build?.command !== undefined && typeof data.build.command !== 'string') {
+    issues.push(issue('error', 'CONFIG_FIELD_TYPE', `${field('build.command')} must be a string.`, item.path));
+  }
+
+  if (data.assets !== undefined && (!data.assets || typeof data.assets !== 'object' || Array.isArray(data.assets))) {
+    issues.push(issue('error', 'CONFIG_FIELD_TYPE', `${field('assets')} must be an object.`, item.path));
+  } else if (data.assets?.directory !== undefined) {
+    if (typeof data.assets.directory !== 'string' || !data.assets.directory.trim()) {
+      issues.push(issue('error', 'CONFIG_FIELD_TYPE', `${field('assets.directory')} must be a non-empty string.`, item.path));
+    } else {
+      await validatePathExists(projectRoot, item.dir, data.assets.directory, item.path, issues, {
+        field: field('assets.directory'), expectDirectory: true, missingSeverity: 'info',
+      });
+    }
+  }
+  if (isFreePlan('cloudflare', plan) && data.limits !== undefined) {
+    issues.push(issue('warning', 'PLAN_LIMIT_UNVERIFIED', `Custom Worker limits at ${field('limits')} may require a paid Cloudflare plan; plan eligibility is not checked offline.`, item.path));
+  }
+}
+
 async function validateCloudflare(projectRoot, files, plan, issues) {
   const configs = configFiles(files, 'cloudflare');
   if (!configs.length) {
-    issues.push(issue('warning', 'PROVIDER_CONFIG_MISSING', 'No Wrangler config was found. Cloudflare can deploy with command-line defaults, but provider-specific checks are limited.'));
+    issues.push(issue('warning', 'PROVIDER_CONFIG_MISSING', 'No Wrangler config was found. Cloudflare can deploy without a Wrangler file, but provider-specific checks are limited.'));
     return;
   }
-  if (configs.length > 1) issues.push(issue('warning', 'MULTIPLE_PROVIDER_CONFIGS', 'Found multiple Wrangler config files; each is checked independently.'));
+  if (configs.length > 1) issues.push(issue('warning', 'MULTIPLE_PROVIDER_CONFIGS', `Found ${configs.length} Wrangler config files; each is checked independently.`));
   for (const item of configs) {
     const data = await parseConfigFile(projectRoot, item.path, issues);
     if (data === undefined || !assertObjectConfig(data, item.path, issues, 'Wrangler')) continue;
-    if (data.name !== undefined) validateString(data.name, item.path, 'name', issues, { required: true });
-    if (data.main !== undefined) {
-      if (validateString(data.main, item.path, 'main', issues, { required: true })) {
-        await validatePathExists(projectRoot, item.dir, data.main, item.path, issues, {
-          field: 'main', expectDirectory: false, missingSeverity: 'error',
-        });
+    await validateCloudflareSettings(projectRoot, item, data, plan, issues, { requireCompatibilityDate: true });
+
+    if (data.env !== undefined && (!data.env || typeof data.env !== 'object' || Array.isArray(data.env))) {
+      issues.push(issue('error', 'CONFIG_FIELD_TYPE', 'env must be an object of named Wrangler environments.', item.path));
+      continue;
+    }
+    for (const [environment, settings] of Object.entries(data.env ?? {})) {
+      const fieldPrefix = `env.${environment}.`;
+      if (!environment.trim() || !settings || typeof settings !== 'object' || Array.isArray(settings)) {
+        issues.push(issue('error', 'CLOUDFLARE_ENVIRONMENT_INVALID', `Wrangler environment ${JSON.stringify(environment)} must have a non-empty name and an object configuration.`, item.path));
+        continue;
       }
-    }
-    const pagesOutput = data.pages_build_output_dir ?? data.pagesBuildOutputDir;
-    if (pagesOutput !== undefined) {
-      if (typeof pagesOutput !== 'string') {
-        issues.push(issue('error', 'CONFIG_FIELD_TYPE', 'pages_build_output_dir must be a string.', item.path));
-      } else {
-        await validatePathExists(projectRoot, item.dir, pagesOutput, item.path, issues, {
-          field: 'pages_build_output_dir', expectDirectory: true, missingSeverity: 'info',
-        });
-      }
-    }
-    if (data.compatibility_date !== undefined && !isCalendarDate(data.compatibility_date)) {
-      issues.push(issue('error', 'CLOUDFLARE_COMPATIBILITY_DATE_INVALID', 'compatibility_date must be a real calendar date in YYYY-MM-DD format.', item.path));
-    } else if (!data.compatibility_date) {
-      issues.push(issue('error', 'CLOUDFLARE_COMPATIBILITY_DATE_REQUIRED', 'A pinned compatibility_date is required by dotdeployer strict policy.', item.path,
-        'Add a compatibility_date (YYYY-MM-DD) to avoid runtime behavior changing between local and hosted deploys.'));
-    }
-    if (data.compatibility_flags !== undefined && (!Array.isArray(data.compatibility_flags) || data.compatibility_flags.some((flag) => typeof flag !== 'string'))) {
-      issues.push(issue('error', 'CONFIG_FIELD_TYPE', 'compatibility_flags must be an array of strings.', item.path));
-    }
-    if (data.vars !== undefined && (!data.vars || typeof data.vars !== 'object' || Array.isArray(data.vars))) {
-      issues.push(issue('error', 'CONFIG_FIELD_TYPE', 'vars must be an object.', item.path));
-    } else if (data.vars) {
-      for (const [key, value] of Object.entries(data.vars)) {
-        if (typeof value !== 'string') {
-          issues.push(issue('error', 'CLOUDFLARE_VAR_INVALID', `Wrangler vars.${key} must be a string.`, item.path));
-        }
-        if (/(?:secret|token|password|private[_-]?key|api[_-]?key)/i.test(key)) {
-          issues.push(issue('warning', 'POSSIBLE_SECRET_IN_CONFIG', `Wrangler vars key ${key} looks sensitive; vars are part of project configuration and should not hold secrets.`, item.path,
-            'Store secret values with wrangler secret or the provider secret manager.'));
-        }
-      }
-    }
-    if (data.build !== undefined && (!data.build || typeof data.build !== 'object' || Array.isArray(data.build))) {
-      issues.push(issue('error', 'CONFIG_FIELD_TYPE', 'build must be an object.', item.path));
-    } else if (data.build?.command !== undefined && typeof data.build.command !== 'string') {
-      issues.push(issue('error', 'CONFIG_FIELD_TYPE', 'build.command must be a string.', item.path));
-    }
-    if (data.assets !== undefined && (!data.assets || typeof data.assets !== 'object' || Array.isArray(data.assets))) {
-      issues.push(issue('error', 'CONFIG_FIELD_TYPE', 'assets must be an object.', item.path));
-    } else if (typeof data.assets?.directory === 'string') {
-      await validatePathExists(projectRoot, item.dir, data.assets.directory, item.path, issues, {
-        field: 'assets.directory', expectDirectory: true, missingSeverity: 'info',
-      });
-    }
-    if (isFreePlan('cloudflare', plan) && data.limits !== undefined) {
-      issues.push(issue('warning', 'PLAN_LIMIT_UNVERIFIED', 'Custom Worker limits may require a paid Cloudflare plan; plan eligibility is not checked offline.', item.path));
+      await validateCloudflareSettings(projectRoot, item, settings, plan, issues, { fieldPrefix });
     }
   }
 }
@@ -614,7 +644,7 @@ export async function validateGenericProject(projectRoot, files, issues) {
 
   for (const file of files) {
     const basename = path.posix.basename(file.path);
-    if (/^\.env(?:\..+)?$/i.test(basename) && !['.env.example', '.env.sample', '.env.template'].includes(basename.toLowerCase())) {
+    if (/^\.env(?:\..+)?$/i.test(basename) && !['.env.example', '.env.sample', '.env.template', '.env.defaults'].includes(basename.toLowerCase())) {
       issues.push(issue('warning', 'ENV_FILE_IN_DEPLOY_CONTEXT', `${file.path} is part of the deployable Git context.`, file.path,
         'Do not commit real credentials in environment files; provide values through the hosting provider secret manager.'));
     }

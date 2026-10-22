@@ -62,14 +62,21 @@ const SECRET_RULES = [
     severity: 'error',
     message: 'A value matching a Slack token is committed in the deployable context.',
     remediation: 'Revoke the token and move it to the provider secret manager.',
-    pattern: /\bxox(?:a|b|p|r|s)-[A-Za-z0-9-]{10,}\b/g,
+    pattern: /\b(?:xox(?:a|b|p|r|s)|xapp)-[A-Za-z0-9-]{10,}\b/g,
   },
   {
     id: 'STRIPE_SECRET_KEY',
     severity: 'error',
-    message: 'A value matching a Stripe secret key is committed in the deployable context.',
+    message: 'A value matching a Stripe secret or restricted key is committed in the deployable context.',
     remediation: 'Roll the key, remove it from Git history, and inject it at deploy time.',
-    pattern: /\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b/g,
+    pattern: /\b(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g,
+  },
+  {
+    id: 'OPENAI_API_KEY',
+    severity: 'error',
+    message: 'A value matching an OpenAI project, service-account, or admin API key is committed in the deployable context.',
+    remediation: 'Revoke the key, remove it from Git history, and inject it through a protected secret.',
+    pattern: /\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}\b/g,
   },
   {
     id: 'GOOGLE_API_KEY',
@@ -77,6 +84,14 @@ const SECRET_RULES = [
     message: 'A value matching a Google API key is committed in the deployable context.',
     remediation: 'Restrict or rotate the key and move it to a provider-managed secret.',
     pattern: /\bAIza[0-9A-Za-z_-]{35}\b/g,
+  },
+  {
+    id: 'URL_CREDENTIALS',
+    severity: 'error',
+    message: 'A URL with an embedded username and password is committed in the deployable context.',
+    remediation: 'Remove the credentials from the URL, rotate them if they are real, and provide them through a protected secret.',
+    pattern: /\b[a-z][a-z0-9+.-]*:\/\/[^\s/:@]+:[^\s/@]+@/gi,
+    ignore: (match) => isPlaceholderCredentialUrl(match[0]),
   },
   {
     id: 'NPM_TOKEN',
@@ -203,6 +218,7 @@ function scanSecrets(text, file, state, lineAt) {
     rule.pattern.lastIndex = 0;
     let match;
     while ((match = rule.pattern.exec(text))) {
+      if (rule.ignore?.(match)) continue;
       const added = addIssueWithLimit(state, issueAt(
         rule.severity,
         `SECRET_${rule.id}`,
@@ -250,6 +266,64 @@ function extractEnvironmentReferences(text, file, references, lineAt) {
       });
       if (match[0].length === 0) pattern.lastIndex += 1;
     }
+  }
+}
+
+function normalizeEnvironmentValue(rawValue) {
+  const text = String(rawValue ?? '').trim();
+  if (!text || text.startsWith('#')) return '';
+  const quote = text[0];
+  if (quote === '"' || quote === "'") {
+    for (let index = 1; index < text.length; index += 1) {
+      if (text[index] !== quote || text[index - 1] === '\\') continue;
+      const trailing = text.slice(index + 1).trim();
+      if (!trailing || trailing.startsWith('#')) return text.slice(1, index).trim();
+      break;
+    }
+    return text;
+  }
+  return text.replace(/\s+#.*$/, '').trim();
+}
+
+function isPlaceholderValue(rawValue) {
+  const value = normalizeEnvironmentValue(rawValue);
+  if (!value || /^\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)$/.test(value)) return true;
+  if (/^<[^>]*>$/.test(value)) return true;
+  return /^(?:change[-_ ]?me|replace[-_ ]?me|redacted|masked|placeholder|dummy|example|sample|test(?:ing)?|password|pass|secret|token|api[-_ ]?key|user(?:name)?|not[-_ ]?a[-_ ]?real[-_ ]?.*|your[-_ ].*|x+|\*+)$/i.test(value);
+}
+
+function isPlaceholderCredentialUrl(urlPrefix) {
+  const schemeEnd = urlPrefix.indexOf('://');
+  const userInfo = urlPrefix.slice(schemeEnd + 3, -1);
+  const separator = userInfo.indexOf(':');
+  return separator < 0 || isPlaceholderValue(userInfo.slice(separator + 1));
+}
+
+function isEnvironmentFile(filePath) {
+  const basename = relativeBasename(filePath);
+  return /^\.env(?:\..+)?$/i.test(basename) && !ENVIRONMENT_TEMPLATE_NAMES.has(basename);
+}
+
+function scanEnvironmentFileValues(text, file, state) {
+  if (!isEnvironmentFile(file.path)) return;
+  for (const [index, line] of text.split(/\r?\n/).entries()) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!match || !environmentSensitivity(match[1]) || isPlaceholderValue(match[2])) continue;
+
+    // URLs without embedded credentials are often local endpoints rather than
+    // secrets. URL credentials themselves are covered by SECRET_URL_CREDENTIALS.
+    const value = normalizeEnvironmentValue(match[2]);
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) continue;
+
+    const added = addIssueWithLimit(state, issueAt(
+      'error',
+      'SECRET_ENVIRONMENT_VALUE',
+      `Sensitive environment variable ${match[1]} has a literal value in a committed environment file.`,
+      file.path,
+      index + 1,
+      'Remove the value from Git, rotate it if real, and inject it through the provider secret manager. Keep only names or placeholders in committed templates.',
+    ));
+    if (!added) return;
   }
 }
 
@@ -453,6 +527,7 @@ export async function auditProject({
         audit.scannedTextFiles += 1;
         audit.scannedBytes += bytes.length;
         scanSecrets(text, file, auditState, lineAt);
+        scanEnvironmentFileValues(text, file, auditState);
         if (ENVIRONMENT_TEMPLATE_NAMES.has(relativeBasename(file.path))) {
           collectTemplateVariables(text, file, documented);
         }

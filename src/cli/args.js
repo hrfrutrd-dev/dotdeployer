@@ -29,7 +29,7 @@ function defaults(command) {
 
 function normalizeProvider(value) {
   const normal = value.toLowerCase();
-  return PROVIDER_ALIASES[normal] ?? normal;
+  return Object.hasOwn(PROVIDER_ALIASES, normal) ? PROVIDER_ALIASES[normal] : normal;
 }
 
 function requireValue(args, option) {

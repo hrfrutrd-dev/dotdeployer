@@ -259,3 +259,27 @@ test('respects .gitignore when measuring the Git deployment context', async (t) 
   assert.equal(result.ok, true);
   assert.equal(result.filesScanned, 2);
 });
+
+test('validates Cloudflare environment overrides with environment-specific field paths', async (t) => {
+  const root = await makeProject();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await write(root, 'wrangler.toml', [
+    'name = "environment-worker"',
+    'main = "src/index.js"',
+    'compatibility_date = "2026-10-01"',
+    '',
+    '[env.staging]',
+    'main = "src/missing.js"',
+    'compatibility_date = "2026-02-30"',
+    'vars = { API_TOKEN = 123 }',
+    'assets = { directory = 42 }',
+  ].join('\n'));
+  await write(root, 'src/index.js', 'export default {};');
+
+  const result = await checkProject({ projectRoot: root, provider: 'cloudflare' });
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((item) => item.code === 'CONFIG_PATH_NOT_FOUND' && item.message.includes('env.staging.main')));
+  assert.ok(result.issues.some((item) => item.code === 'CLOUDFLARE_COMPATIBILITY_DATE_INVALID' && item.message.includes('env.staging.compatibility_date')));
+  assert.ok(result.issues.some((item) => item.code === 'CLOUDFLARE_VAR_INVALID' && item.message.includes('env.staging.vars.API_TOKEN')));
+  assert.ok(result.issues.some((item) => item.code === 'CONFIG_FIELD_TYPE' && item.message.includes('env.staging.assets.directory')));
+});

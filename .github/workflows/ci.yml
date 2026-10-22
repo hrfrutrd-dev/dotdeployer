@@ -25,6 +25,9 @@ jobs:
         run: npm ci
       - name: Run tests
         run: npm test
+      - name: Audit production dependencies
+        if: matrix.node == '22'
+        run: npm audit --omit=dev --audit-level=moderate
       - name: Self-audit (strict, generic provider)
         run: node ./bin/dotdeployer.js audit . --provider generic --strict
       - name: Generate a SARIF report

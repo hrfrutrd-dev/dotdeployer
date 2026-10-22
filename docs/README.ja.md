@@ -103,7 +103,7 @@ dotdeployer deploy . --provider cloudflare --environment staging --execute --yes
 - `--execute --yes` の両方を明示する。
 - `--environment` で Wrangler 設定に存在する名前付き環境を指定する。
 - 対象が Cloudflare Workers であり、Pages ではない。
-- 対象環境名（または Wrangler の環境 Worker 名）に `prod` / `production` セグメントが含まれない。
+- 対象環境名（または Wrangler 環境適用後の実効 Worker 名。トップレベル名の継承を含む）に `prod` / `production` セグメントが含まれない。
 - 認証・静的検査・セキュリティ監査・同じ環境での Wrangler dry-run が成功する。
 
 ```sh
@@ -122,13 +122,13 @@ dotdeployer deploy . --provider cloudflare --environment staging --execute --yes
 
 ## デプロイセキュリティ監査と環境変数契約
 
-`audit` は **実際に Git デプロイコンテキストへ入るテキストファイル**だけを読み、プロジェクトのコード・install script・外部 CLI を実行しません。高信頼度の credential パターン（private key、AWS access key ID、GitHub / GitLab / Slack token、Stripe secret key、Google API key、`.npmrc` / `.netrc` の literal credential）と、private SSH key・keystore のようなファイル名を検査します。
+`audit` は **実際に Git デプロイコンテキストへ入るテキストファイル**だけを読み、プロジェクトのコード・install script・外部 CLI を実行しません。高信頼度の credential パターン（private key、AWS access key ID、GitHub / GitLab / Slack token、Stripe / OpenAI key、Google API key、password を埋め込んだ URL、`.npmrc` / `.netrc` の literal credential）と、private SSH key・keystore のようなファイル名を検査します。テンプレート以外のコミット済み `.env` ファイルで、機密名の変数にリテラル値がある場合は error にします。空値・明らかなプレースホルダー・保護された `$VAR` / `${VAR}` 参照・credential を含まない URL は、この追加ルールでは error にしません。
 
 - マッチした credential の**値は標準出力・JSON・SARIF に一切出力しません**。ファイル名、行番号、ルール名、修正案だけが返ります。
 - `audit` が `error` を出した場合は、値を無効化・rotate して Git の履歴からも除去してください。単に次の commit で消すだけでは不十分なことがあります。
 - binary と認識したファイル、Git で無視されてデプロイ対象に含まれないファイル、未知の credential 形式、git history、外部 secret manager の値は検査範囲外です。したがって PASS は secret が絶対に存在しないことの証明ではありません。
 
-加えて、JavaScript / TypeScript / Vue / Svelte / Astro の `process.env.NAME`、`import.meta.env.NAME`、`Deno.env.get("NAME")`、`Bun.env.NAME` を静的に収集し、`.env.example`、`.env.sample`、`.env.template`、および対応プロバイダー設定の非 secret 環境変数宣言と照合します。未文書化の変数を warning として返し、`NEXT_PUBLIC_`、`VITE_`、`REACT_APP_`、`NUXT_PUBLIC_`、`GATSBY_`、`EXPO_PUBLIC_`、`VUE_APP_`、`PUBLIC_`、`ASTRO_PUBLIC_` の public prefix が password / token / secret / database URL などに付いている場合は error にします。`API_KEY` のように公開を意図する場合も warning が出るため、origin / referrer / API 制限を確認してください。
+加えて、JavaScript / TypeScript / Vue / Svelte / Astro の `process.env.NAME`、`import.meta.env.NAME`、`Deno.env.get("NAME")`、`Bun.env.NAME` を静的に収集し、`.env.example`、`.env.sample`、`.env.template`、`.env.defaults`、および対応プロバイダー設定の非 secret 環境変数宣言と照合します。未文書化の変数を warning として返し、`NEXT_PUBLIC_`、`VITE_`、`REACT_APP_`、`NUXT_PUBLIC_`、`GATSBY_`、`EXPO_PUBLIC_`、`VUE_APP_`、`PUBLIC_`、`ASTRO_PUBLIC_` の public prefix が password / token / secret / database URL などに付いている場合は error にします。`API_KEY` のように公開を意図する場合も warning が出るため、origin / referrer / API 制限を確認してください。
 
 ```sh
 # 値を置かず、必要なキー名だけをドキュメント化
@@ -151,7 +151,7 @@ SARIF には位置情報を持つ issue を file / line として出力します
 | Render | `render.yaml` / `render.yml` | Blueprint の YAML、services / service type / envVars / rootDir / static publish path。Free 想定では persistent disk をエラーにします。 |
 | Railway | `railway.json` / `railway.toml` | JSON / TOML、build / deploy の代表フィールド、healthcheck、再起動ポリシー、Dockerfile 参照。 |
 | Vercel | `vercel.json` | JSON、build/output directory、rewrites / redirects / headers、functions の代表的な型。Free 想定で cron を使う場合は現在のプラン制限を別途確認する警告を出します。 |
-| Cloudflare Workers / Pages | `wrangler.toml` / `wrangler.json` / `wrangler.jsonc` | TOML / JSON / JSONC、main / assets のパス、vars、build、互換日付。互換日付が未指定の場合はローカルポリシーでエラーにします。 |
+| Cloudflare Workers / Pages | `wrangler.toml` / `wrangler.json` / `wrangler.jsonc` | TOML / JSON / JSONC、main / assets のパス、vars、build、互換日付、名前付き `env.*` の上書き設定。互換日付が未指定の場合はローカルポリシーでエラーにします。 |
 | Google Apps Script | `appsscript.json` / `.clasp.json` | マニフェスト、`rootDir`、runtime、OAuth scopes、Web App 設定の代表項目。ビルド時に `.gs` の JavaScript 構文を解析しますが、Apps Script API を実行するものではありません。 |
 | 共通 | `package.json`、lockfile、`Dockerfile`、デプロイ対象テキスト | JSON / scripts / `engines.node` / `packageManager` の型と lockfile 整合性、Dockerfile の `FROM`、`audit` による高信頼度 credential / 環境変数契約の検査。 |
 

@@ -105,7 +105,7 @@ Parses every detected or explicitly selected provider configuration, validates p
 
 ### `audit`
 
-Runs the full `check` preflight and adds the secret and environment-variable audit. It never executes project code. Values matching high-confidence credential patterns are reported by file, line, and rule name only. Undocumented environment variables are warnings, and become errors under `--strict`; a sensitive name behind a public prefix (`VITE_`, `NEXT_PUBLIC_`, …) is an error from the start.
+Runs the full `check` preflight and adds the secret and environment-variable audit. It never executes project code. Values matching high-confidence credential patterns, URLs with embedded passwords, and literal sensitive values in non-template `.env` files are reported by file, line, and rule name only. Undocumented environment variables are warnings, and become errors under `--strict`; a sensitive name behind a public prefix (`VITE_`, `NEXT_PUBLIC_`, …) is an error from the start.
 
 ### `test`
 
@@ -142,7 +142,7 @@ Each probe is preceded by `<cli> --version`. Identity output and raw logs are de
 
 ### `deploy`
 
-Simulation first. The sequence is local preflight → secret audit → authentication check → upload-free dry-run of the named environment → artifact size check. A real deploy additionally requires `--execute --yes`, a Wrangler environment declared in the configuration, a Worker (not Pages), a non-production environment name, and success of every earlier step. Blocking codes include `DEPLOY_PROVIDER_UNSUPPORTED`, `DEPLOY_ENVIRONMENT_REQUIRED`, `DEPLOY_CONFIRMATION_REQUIRED`, `PAGES_DEPLOY_UNSUPPORTED`, `WRANGLER_ENVIRONMENT_NOT_CONFIGURED`, and `PRODUCTION_DEPLOY_BLOCKED`. In simulation mode the publish command is listed with `"planned": true` instead of being run.
+Simulation first. The sequence is local preflight → secret audit → authentication check → upload-free dry-run of the named environment → artifact size check. A real deploy additionally requires `--execute --yes`, a Wrangler environment declared in the configuration, a Worker (not Pages), non-production environment and effective Worker names, and success of every earlier step. Blocking codes include `DEPLOY_PROVIDER_UNSUPPORTED`, `DEPLOY_ENVIRONMENT_REQUIRED`, `DEPLOY_CONFIRMATION_REQUIRED`, `PAGES_DEPLOY_UNSUPPORTED`, `WRANGLER_ENVIRONMENT_NOT_CONFIGURED`, and `PRODUCTION_DEPLOY_BLOCKED`. In simulation mode the publish command is listed with `"planned": true` instead of being run.
 
 ### `providers`
 

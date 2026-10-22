@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CliUsageError, parseArgs } from '../../src/cli/args.js';
+import { normalizeProvider } from '../../src/providers/index.js';
 
 const parseError = (args, expression) => {
   assert.throws(() => parseArgs(args), (error) => {
@@ -68,4 +69,12 @@ test('help is available before command option validation', () => {
   const options = parseArgs(['deploy', '--execute', '--help']);
   assert.equal(options.help, true);
   assert.equal(options.execute, true);
+});
+
+test('keeps prototype-like provider names as strings for normal unknown-provider handling', () => {
+  for (const provider of ['constructor', '__proto__', 'toString']) {
+    const parsed = parseArgs(['check', '--provider', provider]).provider;
+    assert.equal(parsed, provider.toLowerCase());
+    assert.equal(normalizeProvider(parsed), undefined);
+  }
 });
