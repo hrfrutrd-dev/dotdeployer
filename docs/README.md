@@ -103,7 +103,7 @@ A real remote operation is performed only when all of the following hold:
 - Both `--execute` and `--yes` are supplied explicitly.
 - `--environment` names an environment that exists in the Wrangler configuration.
 - The target is Cloudflare Workers, not Pages.
-- The target environment name (or the Wrangler environment Worker name) contains no `prod` / `production` segment.
+- The target environment name (or the effective Worker name after applying the Wrangler environment, including an inherited top-level name) contains no `prod` / `production` segment.
 - Authentication, static checks, the security audit, and the Wrangler dry-run for that same environment all succeed.
 
 ```sh
@@ -122,13 +122,13 @@ If any **individual file in the deploy context is 20,000,000 bytes or larger**, 
 
 ## Deployment security audit and the environment-variable contract
 
-`audit` reads **only the text files that would actually enter the Git deploy context**. It never executes project code, install scripts, or external CLIs. It looks for high-confidence credential patterns (private keys, AWS access key IDs, GitHub / GitLab / Slack tokens, Stripe secret keys, Google API keys, literal credentials in `.npmrc` / `.netrc`) and for file names such as private SSH keys and keystores.
+`audit` reads **only the text files that would actually enter the Git deploy context**. It never executes project code, install scripts, or external CLIs. It looks for high-confidence credential patterns (private keys, AWS access key IDs, GitHub / GitLab / Slack tokens, Stripe and OpenAI keys, Google API keys, URLs with embedded passwords, and literal credentials in `.npmrc` / `.netrc`) and for file names such as private SSH keys and keystores. In committed non-template `.env` files, a sensitive-looking variable with a literal value is an error. Empty values, obvious placeholders, protected `$VAR` / `${VAR}` references, and URLs without embedded credentials are not promoted by this additional rule.
 
 - **Matched credential values are never printed** to stdout, JSON, or SARIF. Only the file name, line number, rule name, and remediation are returned.
 - If `audit` reports an `error`, revoke or rotate the value and remove it from Git history as well; deleting it in the next commit is often not enough.
 - Files detected as binary, files excluded from the deploy context by Git ignore rules, unknown credential formats, Git history, and external secret-manager values are out of scope. A PASS is therefore not proof that no secret exists.
 
-In addition, static references to `process.env.NAME`, `import.meta.env.NAME`, `Deno.env.get("NAME")`, and `Bun.env.NAME` in JavaScript / TypeScript / Vue / Svelte / Astro are collected and compared against `.env.example`, `.env.sample`, `.env.template`, and the non-secret environment declarations in supported provider configuration. Undocumented variables are reported as warnings, and a public prefix (`NEXT_PUBLIC_`, `VITE_`, `REACT_APP_`, `NUXT_PUBLIC_`, `GATSBY_`, `EXPO_PUBLIC_`, `VUE_APP_`, `PUBLIC_`, `ASTRO_PUBLIC_`) attached to a password / token / secret / database URL becomes an error. Names that are intentionally public, such as `API_KEY`, still produce a warning, so review origin / referrer / API restrictions.
+In addition, static references to `process.env.NAME`, `import.meta.env.NAME`, `Deno.env.get("NAME")`, and `Bun.env.NAME` in JavaScript / TypeScript / Vue / Svelte / Astro are collected and compared against `.env.example`, `.env.sample`, `.env.template`, `.env.defaults`, and the non-secret environment declarations in supported provider configuration. Undocumented variables are reported as warnings, and a public prefix (`NEXT_PUBLIC_`, `VITE_`, `REACT_APP_`, `NUXT_PUBLIC_`, `GATSBY_`, `EXPO_PUBLIC_`, `VUE_APP_`, `PUBLIC_`, `ASTRO_PUBLIC_`) attached to a password / token / secret / database URL becomes an error. Names that are intentionally public, such as `API_KEY`, still produce a warning, so review origin / referrer / API restrictions.
 
 ```sh
 # Document the required key names without any values
@@ -149,7 +149,7 @@ SARIF output includes file and line information for issues that have a position.
 | Render | `render.yaml` / `render.yml` | Blueprint YAML; services, service type, envVars, rootDir, static publish path. Under the Free profile, persistent disks are errors. |
 | Railway | `railway.json` / `railway.toml` | JSON / TOML; representative build and deploy fields, healthcheck, restart policy, Dockerfile references. |
 | Vercel | `vercel.json` | JSON; build / output directory, rewrites / redirects / headers, representative function types. With crons under the Free profile it warns that current plan limits must be verified separately. |
-| Cloudflare Workers / Pages | `wrangler.toml` / `wrangler.json` / `wrangler.jsonc` | TOML / JSON / JSONC; main / assets paths, vars, build, compatibility date. A missing compatibility date is an error under local policy. |
+| Cloudflare Workers / Pages | `wrangler.toml` / `wrangler.json` / `wrangler.jsonc` | TOML / JSON / JSONC; main / assets paths, vars, build, compatibility date, and named `env.*` overrides. A missing compatibility date is an error under local policy. |
 | Google Apps Script | `appsscript.json` / `.clasp.json` | Manifest, `rootDir`, runtime, OAuth scopes, representative Web App settings. `.gs` files are parsed for JavaScript syntax during a build, but the Apps Script API is never called. |
 | Common | `package.json`, lockfiles, `Dockerfile`, deployable text | JSON / scripts / `engines.node` / `packageManager` types and lockfile consistency, Dockerfile `FROM`, and the high-confidence credential and environment-variable contract checks performed by `audit`. |
 

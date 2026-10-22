@@ -115,9 +115,10 @@ export async function verifyProject({
   };
 }
 
-function isProductionEnvironment(name, environmentConfig) {
-  const candidates = [name, environmentConfig?.name].filter((value) => typeof value === 'string');
-  return candidates.some((value) => /(?:^|[-_.])(?:prod|production)(?:$|[-_.])/i.test(value.trim()));
+function isProductionEnvironment(...candidates) {
+  return candidates
+    .filter((value) => typeof value === 'string')
+    .some((value) => /(?:^|[-_.])(?:prod|production)(?:$|[-_.])/i.test(value.trim()));
 }
 
 async function getWranglerTarget(projectRoot, files, environment) {
@@ -150,10 +151,15 @@ async function getWranglerTarget(projectRoot, files, environment) {
   if (!environmentConfig || typeof environmentConfig !== 'object' || Array.isArray(environmentConfig)) {
     return { error: issue('error', 'WRANGLER_ENVIRONMENT_INVALID', `Wrangler environment ${JSON.stringify(environment)} must be an object.`, config.path) };
   }
+  const workerName = typeof environmentConfig.name === 'string'
+    ? environmentConfig.name
+    : typeof data.name === 'string'
+      ? `${data.name}-${environment}`
+      : undefined;
   return {
     config,
     configDirectory: path.posix.dirname(config.path) === '.' ? '.' : path.posix.dirname(config.path),
-    environmentConfig,
+    workerName,
   };
 }
 
@@ -242,7 +248,7 @@ export async function deployProject({
     report.issues.push(target.error);
     return report;
   }
-  if (execute && isProductionEnvironment(environment, target.environmentConfig)) {
+  if (execute && isProductionEnvironment(environment, target.workerName)) {
     return deploymentError(report, 'PRODUCTION_DEPLOY_BLOCKED', 'The selected Wrangler environment is production; the experimental deployment path only allows non-production targets.', target.config.path);
   }
 

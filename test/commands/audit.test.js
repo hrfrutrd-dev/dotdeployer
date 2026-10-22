@@ -136,3 +136,50 @@ test('recognizes protected npm token references but flags literal .npmrc tokens'
   assert.equal(literalReport.ok, false);
   assert.ok(literalReport.auditIssues.some((item) => item.code === 'SECRET_NPM_TOKEN'));
 });
+
+test('detects URL credentials and literal environment secrets without exposing their values', async (t) => {
+  const root = await makeProject(t);
+  const secret = `hardcoded-${'Q'.repeat(24)}`;
+  const databaseUrl = [`postgres://deploy:${secret}`, 'db.internal.example/app'].join('@');
+  await write(root, 'src/database.js', `export const databaseUrl = ${JSON.stringify(databaseUrl)};\n`);
+  await write(root, '.env.production', `API_KEY=${secret}\n`);
+
+  const report = await auditProject({ projectRoot: root, provider: 'generic' });
+  assert.equal(report.ok, false);
+  assert.ok(report.auditIssues.some((item) => item.code === 'SECRET_URL_CREDENTIALS' && item.file === 'src/database.js'));
+  assert.ok(report.auditIssues.some((item) => item.code === 'SECRET_ENVIRONMENT_VALUE' && item.file === '.env.production' && item.line === 1));
+  assert.equal(JSON.stringify(report).includes(secret), false);
+  assert.equal(JSON.stringify(reportToSarif(report)).includes(secret), false);
+});
+
+test('does not flag protected references, placeholders, or credential-free URLs as literal environment secrets', async (t) => {
+  const root = await makeProject(t);
+  await write(root, '.env.local', [
+    'API_KEY=${DEPLOY_API_KEY}',
+    'PASSWORD=changeme',
+    'TOKEN="${DEPLOY_TOKEN}" # injected by CI',
+    'SECRET="changeme" # placeholder',
+    'PRIVATE_VALUE=not-a-real-secret',
+    'DATABASE_URL=postgres://localhost/application',
+  ].join('\n'));
+  await write(root, '.env.defaults', 'API_KEY=\n');
+  await write(root, 'src/server.js', `export const key = ${serverEnvironment('API_KEY')};\n`);
+  await write(root, 'src/example.js', 'export const example = "postgres://user:password@example.invalid/db";\n');
+
+  const report = await auditProject({ projectRoot: root, provider: 'generic' });
+  assert.equal(report.auditIssues.some((item) => item.code === 'SECRET_ENVIRONMENT_VALUE'), false);
+  assert.equal(report.auditIssues.some((item) => item.code === 'SECRET_URL_CREDENTIALS'), false);
+  assert.equal(report.environment.variables.find((item) => item.name === 'API_KEY').documented, true);
+  assert.equal(report.issues.filter((item) => item.code === 'ENV_FILE_IN_DEPLOY_CONTEXT').length, 1);
+});
+
+test('recognizes prefixed OpenAI API keys without returning the key', async (t) => {
+  const root = await makeProject(t);
+  const key = `sk-proj-${'K'.repeat(40)}`;
+  await write(root, 'src/client.js', `export const key = ${JSON.stringify(key)};\n`);
+
+  const report = await auditProject({ projectRoot: root, provider: 'generic' });
+  assert.equal(report.ok, false);
+  assert.ok(report.auditIssues.some((item) => item.code === 'SECRET_OPENAI_API_KEY'));
+  assert.equal(JSON.stringify(report).includes(key), false);
+});

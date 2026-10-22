@@ -316,3 +316,41 @@ test('CLI verify and deploy JSON modes are usable; execute requires an explicit 
   const calls = await readFile(trace, 'utf8');
   assert.doesNotMatch(calls, /^deploy --env staging$/m);
 });
+
+test('blocks execution when the inherited Worker name contains a production segment', async (t) => {
+  const root = await makeProject(t);
+  const bin = path.join(root, 'fake-bin');
+  await mkdir(bin);
+  const trace = path.join(root, 'commands.log');
+  await write(root, 'wrangler.toml', [
+    'name = "production-worker"',
+    'main = "src/index.js"',
+    'compatibility_date = "2026-10-01"',
+    '',
+    '[env.staging]',
+  ].join('\n'));
+  await write(root, 'src/index.js', 'export default {};');
+  await fakeCli(bin, 'wrangler', wranglerCli);
+  const env = {
+    ...process.env,
+    PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+    DOTDEPLOYER_WRANGLER_TRACE: trace,
+  };
+
+  const result = await deployProject({
+    projectRoot: root,
+    provider: 'cloudflare',
+    environment: 'staging',
+    execute: true,
+    confirmed: true,
+    env,
+    timeoutSeconds: 5,
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.deployed, false);
+  assert.equal(result.environmentDryRunPassed, false);
+  assert.ok(result.issues.some((item) => item.code === 'PRODUCTION_DEPLOY_BLOCKED'));
+  const calls = await readFile(trace, 'utf8');
+  assert.doesNotMatch(calls, /deploy --dry-run/);
+  assert.doesNotMatch(calls, /^deploy --env staging$/m);
+});

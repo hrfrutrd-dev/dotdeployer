@@ -105,7 +105,7 @@ dotdeployer audit . --provider vercel --sarif > dotdeployer.sarif
 
 ### `audit`
 
-`check` の preflight を実行したうえで、secret と環境変数の監査を追加します。プロジェクトのコードは実行しません。高信頼度の credential パターンに一致した値は、ファイル名・行番号・ルール名だけで報告します。未文書化の環境変数は warning で、`--strict` では error になります。public prefix（`VITE_`、`NEXT_PUBLIC_` など）が付いた機密名は最初から error です。
+`check` の preflight を実行したうえで、secret と環境変数の監査を追加します。プロジェクトのコードは実行しません。高信頼度の credential パターン、password を埋め込んだ URL、テンプレート以外の `.env` にある機密リテラル値は、値そのものを出さず、ファイル名・行番号・ルール名だけで報告します。未文書化の環境変数は warning で、`--strict` では error になります。public prefix（`VITE_`、`NEXT_PUBLIC_` など）が付いた機密名は最初から error です。
 
 ### `test`
 
@@ -142,7 +142,7 @@ CLI が見つからない場合はスキップではなく error になります
 
 ### `deploy`
 
-まずシミュレーションとして、ローカル preflight → secret audit → 認証確認 → 指定環境の upload-free dry-run → artifact のサイズ検査、の順に実行します。実デプロイにはさらに `--execute --yes`、設定に宣言された Wrangler 環境、Workers（Pages ではない）であること、非 production の環境名、および先行する全ステップの成功が必要です。ブロック時のコードには `DEPLOY_PROVIDER_UNSUPPORTED`、`DEPLOY_ENVIRONMENT_REQUIRED`、`DEPLOY_CONFIRMATION_REQUIRED`、`PAGES_DEPLOY_UNSUPPORTED`、`WRANGLER_ENVIRONMENT_NOT_CONFIGURED`、`PRODUCTION_DEPLOY_BLOCKED` があります。シミュレーションでは publish コマンドは実行されず、`"planned": true` として一覧に表示されます。
+まずシミュレーションとして、ローカル preflight → secret audit → 認証確認 → 指定環境の upload-free dry-run → artifact のサイズ検査、の順に実行します。実デプロイにはさらに `--execute --yes`、設定に宣言された Wrangler 環境、Workers（Pages ではない）であること、環境名・実効 Worker 名が非 production であること、および先行する全ステップの成功が必要です。ブロック時のコードには `DEPLOY_PROVIDER_UNSUPPORTED`、`DEPLOY_ENVIRONMENT_REQUIRED`、`DEPLOY_CONFIRMATION_REQUIRED`、`PAGES_DEPLOY_UNSUPPORTED`、`WRANGLER_ENVIRONMENT_NOT_CONFIGURED`、`PRODUCTION_DEPLOY_BLOCKED` があります。シミュレーションでは publish コマンドは実行されず、`"planned": true` として一覧に表示されます。
 
 ### `providers`
 
